@@ -39,7 +39,11 @@ file(GLOB VST3_SDK_SOURCES
   ${VST3_SDK_DIR}/public.sdk/source/vst/vstpresetfile.cpp
   ${VST3_SDK_DIR}/public.sdk/source/vst/vstrepresentation.cpp
   ${VST3_SDK_DIR}/public.sdk/source/vst/hosting/hostclasses.cpp
+  ${VST3_SDK_DIR}/public.sdk/source/vst/hosting/pluginterfacesupport.cpp
+  ${VST3_SDK_DIR}/public.sdk/source/vst/hosting/module.cpp
+  ${VST3_SDK_DIR}/public.sdk/source/vst/hosting/module_linux.cpp
   ${VST3_SDK_DIR}/public.sdk/source/common/pluginview.cpp
+  ${VST3_SDK_DIR}/public.sdk/source/common/commoniids.cpp
 )
 
 include_directories(
