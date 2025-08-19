@@ -16,3 +16,5 @@ node_modules/
 vst3sdk/
 
 *.wav
+
+vst_plugins/

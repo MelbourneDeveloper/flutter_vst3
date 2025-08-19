@@ -152,6 +152,110 @@ void main() {
     }
   });
 
+  test('audio effects processing - 100ms on/off with delay and reverb', () {
+    final host = VstHost.create(
+      sampleRate: 48000, 
+      maxBlock: 512, 
+      dylibPath: libFile.absolute.path
+    );
+    try {
+      // Create a 100ms on, 100ms off pattern for 4 seconds
+      final duration = 4.0; // 4 seconds total
+      final sampleRate = 48000;
+      final totalSamples = (duration * sampleRate).round();
+      final onDuration = 0.1; // 100ms on
+      final offDuration = 0.1; // 100ms off
+      final cycleDuration = onDuration + offDuration; // 200ms cycle
+      final onSamples = (onDuration * sampleRate).round();
+      final cycleSamples = (cycleDuration * sampleRate).round();
+      
+      final audioData = Float32List(totalSamples);
+      
+      // Generate 100ms on/off pattern with 440Hz sine wave
+      for (int i = 0; i < totalSamples; i++) {
+        final cyclePos = i % cycleSamples;
+        final isOn = cyclePos < onSamples;
+        
+        if (isOn) {
+          audioData[i] = 0.5 * sin(2 * pi * 440 * i / sampleRate);
+        } else {
+          audioData[i] = 0.0; // silence during off periods
+        }
+      }
+      
+      print('Generated 100ms on/off pattern audio');
+      print('Total duration: ${duration}s, Cycles: ${(duration / cycleDuration).round()}');
+      print('On samples per cycle: $onSamples, Total samples: $totalSamples');
+      
+      // Apply simple delay effect (simulate 150ms delay)
+      final delayMs = 150.0;
+      final delaySamples = (delayMs * sampleRate / 1000).round();
+      final delayedAudio = Float32List(totalSamples);
+      final feedbackGain = 0.3;
+      
+      for (int i = 0; i < totalSamples; i++) {
+        delayedAudio[i] = audioData[i];
+        if (i >= delaySamples) {
+          // Add delayed signal with feedback
+          delayedAudio[i] += delayedAudio[i - delaySamples] * feedbackGain;
+        }
+      }
+      
+      print('Applied delay effect: ${delayMs}ms delay with ${feedbackGain * 100}% feedback');
+      
+      // Apply simple reverb effect (simulate room reverb)
+      final reverbAudio = Float32List(totalSamples);
+      final reverbDecay = 0.5;
+      final reverbDelay1 = (37 * sampleRate / 1000).round(); // 37ms
+      final reverbDelay2 = (89 * sampleRate / 1000).round(); // 89ms
+      final reverbDelay3 = (127 * sampleRate / 1000).round(); // 127ms
+      
+      for (int i = 0; i < totalSamples; i++) {
+        reverbAudio[i] = delayedAudio[i];
+        
+        // Add multiple delay taps for reverb simulation
+        if (i >= reverbDelay1) {
+          reverbAudio[i] += reverbAudio[i - reverbDelay1] * reverbDecay * 0.3;
+        }
+        if (i >= reverbDelay2) {
+          reverbAudio[i] += reverbAudio[i - reverbDelay2] * reverbDecay * 0.2;
+        }
+        if (i >= reverbDelay3) {
+          reverbAudio[i] += reverbAudio[i - reverbDelay3] * reverbDecay * 0.1;
+        }
+      }
+      
+      print('Applied reverb effect: Multi-tap reverb with ${reverbDecay * 100}% decay');
+      
+      // Normalize to prevent clipping
+      final maxSample = reverbAudio.fold(0.0, (max, sample) => sample.abs() > max ? sample.abs() : max);
+      if (maxSample > 0.95) {
+        final normalizeGain = 0.95 / maxSample;
+        for (int i = 0; i < totalSamples; i++) {
+          reverbAudio[i] *= normalizeGain;
+        }
+        print('Normalized audio by ${normalizeGain.toStringAsFixed(3)}x to prevent clipping');
+      }
+      
+      // Save the processed audio
+      final outputFile = File('/workspace/test_fx_audio_100ms_pattern.wav');
+      final wavData = _createWavFile(reverbAudio, sampleRate);
+      outputFile.writeAsBytesSync(wavData);
+      
+      print('Processed audio saved to: ${outputFile.path}');
+      print('File size: ${outputFile.lengthSync()} bytes');
+      print('Final RMS: ${sqrt(reverbAudio.map((x) => x * x).reduce((a, b) => a + b) / totalSamples)}');
+      print('Audio FX processing completed - download the file to hear the 100ms on/off pattern with delay and reverb!');
+      
+      // Verify the pattern exists
+      expect(reverbAudio.any((sample) => sample.abs() > 0.1), isTrue);
+      expect(outputFile.existsSync(), isTrue);
+      
+    } finally {
+      host.dispose();
+    }
+  });
+
   test('try loading built plugin', () {
     final host = VstHost.create(
       sampleRate: 48000, 
