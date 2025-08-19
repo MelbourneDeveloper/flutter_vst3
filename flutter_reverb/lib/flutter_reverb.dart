@@ -9,4 +9,4 @@ export 'src/reverb_parameters.dart';
 export 'src/reverb_processor.dart';
 export 'src/reverb_plugin.dart';
 export 'src/reverb_ui.dart';
-export 'src/ffi_bridge.dart';
+export 'src/reverb_vst3_processor.dart';

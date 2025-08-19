@@ -76,7 +76,8 @@ graph TB
 
 **Primary Purpose: Build actual VST3 plugins using Dart/Flutter that compile to .vst3 bundles**
 
-- **`flutter_reverb`** - Complete VST3 reverb plugin implementation in pure Dart, compiles via existing C++/VST3 SDK infrastructure to actual .vst3 bundle
+- **`dart_vst3_bridge`** - Generic FFI bridge package for building ANY VST3 plugin in pure Dart
+- **`flutter_reverb`** - Complete VST3 reverb plugin implementation in pure Dart (uses dart_vst3_bridge)
 - **`plugin/`** - C++ VST3 wrapper using Steinberg SDK that hosts Dart code via FFI interop layer
 - **`native/`** - C++ infrastructure providing the bridge between VST3 API and Dart audio processing
 
@@ -196,21 +197,41 @@ cd flutter_reverb/
 flutter run example/demo.dart
 ```
 
-2. **Build the native infrastructure:**
+2. **Build using the Makefile:**
 ```bash
-cd native/
-mkdir build && cd build
-cmake ..
+# Build the complete Flutter Dart Reverb VST3
 make
+
+# Or step by step:
+make reverb-deps      # Install Dart dependencies  
+make reverb-vst       # Build FlutterDartReverb.vst3
+make install          # Install to system VST folder
 ```
 
-3. **Create VST3 bundle:**
-```bash
-cd plugin/
-mkdir build && cd build  
-cmake ..
-make
-# Output: your_plugin.vst3
+### Creating Your Own VST Plugin
+
+```dart
+// 1. Create your audio processor
+import 'package:dart_vst3_bridge/dart_vst3_bridge.dart';
+
+class MyVST3Processor extends VST3Processor {
+  @override
+  void processStereo(List<double> inputL, List<double> inputR,
+                    List<double> outputL, List<double> outputR) {
+    // Your audio processing here!
+    for (int i = 0; i < inputL.length; i++) {
+      outputL[i] = inputL[i] * 0.5; // Simple gain
+      outputR[i] = inputR[i] * 0.5;
+    }
+  }
+  // Implement other VST3Processor methods...
+}
+
+// 2. Register with bridge in main()
+void main() {
+  VST3Bridge.registerProcessor(MyVST3Processor());
+  registerVST3Callbacks();
+}
 ```
 
 ### Building a VST Host Application
@@ -224,8 +245,8 @@ void main() async {
   final host = VstHost();
   await host.initialize();
   
-  // Load VST plugin
-  final plugin = await host.loadPlugin('path/to/plugin.vst3');
+  // Load VST plugin (including your Dart VSTs!)
+  final plugin = await host.loadPlugin('FlutterDartReverb.vst3');
   
   // Create audio graph
   final graph = VstGraph();
@@ -243,12 +264,13 @@ void main() async {
 ## Project Structure
 
 ```
-dart_vst_toolkit/
-├── flutter_reverb/         # Reference VST implementation  
-├── dart_vst_host/          # VST hosting API
-├── dart_vst_graph/         # Audio graph system
-├── native/                 # C++ VST3 implementation
-├── plugin/                 # VST3 plugin wrapper
+dart_vst3_toolkit/
+├── dart_vst3_bridge/       # Generic FFI bridge for ANY Dart VST3 plugin
+├── flutter_reverb/         # Example reverb VST3 implementation (uses bridge)
+├── dart_vst_host/          # VST3 hosting API for Dart applications
+├── dart_vst_graph/         # Audio graph system with VST routing
+├── native/                 # C++ VST3 SDK integration + FFI bridge
+├── plugin/                 # VST3 plugin wrapper (compiles Dart to .vst3)
 ├── flutter_ui/             # GUI host application
 └── vst_plugins/            # External VST3 plugins for testing
 ```
