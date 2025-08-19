@@ -4,6 +4,7 @@
 /// audio.
 
 import 'dart:ffi';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
@@ -40,12 +41,95 @@ class VstHost {
   /// [classUid] to select a specific class from a multi‑class module.
   /// Returns a VstPlugin on success; throws StateError on failure.
   VstPlugin load(String modulePath, {String? classUid}) {
+    print('🔍 DIAGNOSTIC: Attempting to load VST plugin from: $modulePath');
+    print('🔍 DIAGNOSTIC: classUid: ${classUid ?? "null"}');
+    
+    // Check if path exists (could be file or directory for VST3 bundles)
+    final fileEntity = FileSystemEntity.typeSync(modulePath);
+    if (fileEntity == FileSystemEntityType.notFound) {
+      print('❌ DIAGNOSTIC: Path does not exist: $modulePath');
+      throw StateError('VST plugin not found: $modulePath');
+    }
+    print('🔍 DIAGNOSTIC: Path exists, type: $fileEntity');
+    
+    // For .vst3 bundles, check for the actual shared library
+    if (modulePath.endsWith('.vst3')) {
+      print('🔍 DIAGNOSTIC: VST3 bundle detected, checking for shared library...');
+      final vst3Dir = Directory(modulePath);
+      if (!vst3Dir.existsSync()) {
+        print('❌ DIAGNOSTIC: VST3 bundle directory does not exist');
+        throw StateError('VST3 bundle not found: $modulePath');
+      }
+      
+      // Check for architecture-specific libraries
+      final archPaths = [
+        '$modulePath/Contents/aarch64-linux',
+        '$modulePath/Contents/arm64-linux', 
+        '$modulePath/Contents/x86_64-linux',
+        '$modulePath/Contents/Linux',
+        '$modulePath/Contents/linux'
+      ];
+      
+      print('🔍 DIAGNOSTIC: Searching for shared libraries in VST3 bundle...');
+      for (final archPath in archPaths) {
+        if (Directory(archPath).existsSync()) {
+          print('📁 DIAGNOSTIC: Found architecture directory: $archPath');
+          final files = Directory(archPath).listSync();
+          for (final f in files) {
+            if (f.path.endsWith('.so')) {
+              print('📄 DIAGNOSTIC: Found .so file: ${f.path}');
+              
+              // Check architecture of the .so file using readelf
+              try {
+                final result = Process.runSync('readelf', ['-h', f.path]);
+                if (result.exitCode == 0) {
+                  final output = result.stdout.toString();
+                  print('🔍 DIAGNOSTIC: Library architecture info:');
+                  final lines = output.split('\n');
+                  for (final line in lines) {
+                    if (line.contains('Machine:') || line.contains('Class:')) {
+                      print('  $line');
+                    }
+                  }
+                }
+              } catch (e) {
+                print('⚠️ DIAGNOSTIC: Could not run readelf: $e');
+              }
+              
+              // Try to detect if it's x86_64 or ARM
+              final isX86 = archPath.contains('x86_64');
+              final isArm = archPath.contains('aarch64') || archPath.contains('arm64');
+              
+              if (isX86) {
+                print('⚠️ DIAGNOSTIC: This appears to be an x86_64 binary');
+                print('⚠️ DIAGNOSTIC: Current system architecture: ${Platform.version.contains('arm') ? 'ARM' : 'Unknown'}');
+              } else if (isArm) {
+                print('✅ DIAGNOSTIC: This appears to be an ARM binary');
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    print('🔍 DIAGNOSTIC: Calling native dvhLoadPlugin...');
     final p = modulePath.toNativeUtf8();
     final uid = classUid == null ? nullptr : classUid.toNativeUtf8();
     final h = _b.dvhLoadPlugin(handle, p, uid);
     malloc.free(p);
     if (uid != nullptr) malloc.free(uid);
-    if (h == nullptr) throw StateError('Failed to load plugin');
+    
+    if (h == nullptr) {
+      print('❌ DIAGNOSTIC: dvhLoadPlugin returned nullptr');
+      print('❌ DIAGNOSTIC: Possible causes:');
+      print('  1. VST plugin architecture mismatch (x86_64 plugin on ARM system)');
+      print('  2. Missing dependencies (VST3 SDK not properly linked)');
+      print('  3. Invalid VST3 bundle structure');
+      print('  4. Plugin requires specific host features not implemented');
+      throw StateError('Failed to load plugin from $modulePath - check diagnostics above');
+    }
+    
+    print('✅ DIAGNOSTIC: Plugin loaded successfully, handle: $h');
     return VstPlugin._(_b, h);
   }
 }
