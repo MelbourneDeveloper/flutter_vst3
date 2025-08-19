@@ -163,57 +163,25 @@ void main() {
     VstPlugin? reverbPlugin;
     
     try {
-      // HARD REQUIREMENT: Load delay plugin - FAIL if not found
-      final delayPaths = [
-        '/usr/lib/vst3/ChowMatrix.vst3',
-        '/home/vscode/.vst3/ChowMatrix.vst3',
-        '/workspace/vst_plugins/ChowMatrix.vst3',
-        '/opt/vst3/ChowMatrix.vst3',
-      ];
+      // HARD REQUIREMENT: Load TAL-Dub-X (delay) plugin - FAIL if not found
+      final delayPath = '/workspace/vst_plugins/TAL-Dub-X.vst3';
       
-      bool delayLoaded = false;
-      for (final path in delayPaths) {
-        if (File(path).existsSync()) {
-          try {
-            delayPlugin = host.load(path);
-            delayLoaded = true;
-            print('✅ DELAY PLUGIN LOADED: $path');
-            break;
-          } catch (e) {
-            print('❌ Failed to load delay plugin at $path: $e');
-          }
-        }
+      if (!File(delayPath).existsSync() && !Directory(delayPath).existsSync()) {
+        throw Exception('🔥 HARD FAIL: TAL-Dub-X VST3 plugin NOT FOUND at $delayPath');
       }
       
-      if (!delayLoaded) {
-        throw Exception('🔥 HARD FAIL: No delay VST3 plugin found! Required paths: ${delayPaths.join(', ')}');
+      delayPlugin = host.load(delayPath);
+      print('✅ DELAY PLUGIN LOADED: $delayPath');
+      
+      // HARD REQUIREMENT: Load TAL-Reverb-4 plugin - FAIL if not found  
+      final reverbPath = '/workspace/vst_plugins/TAL-Reverb-4.vst3';
+      
+      if (!File(reverbPath).existsSync() && !Directory(reverbPath).existsSync()) {
+        throw Exception('🔥 HARD FAIL: TAL-Reverb-4 VST3 plugin NOT FOUND at $reverbPath');
       }
       
-      // HARD REQUIREMENT: Load reverb plugin - FAIL if not found  
-      final reverbPaths = [
-        '/usr/lib/vst3/DragonflyHallReverb.vst3',
-        '/home/vscode/.vst3/DragonflyHallReverb.vst3', 
-        '/workspace/vst_plugins/DragonflyHallReverb.vst3',
-        '/opt/vst3/DragonflyHallReverb.vst3',
-      ];
-      
-      bool reverbLoaded = false;
-      for (final path in reverbPaths) {
-        if (File(path).existsSync()) {
-          try {
-            reverbPlugin = host.load(path);
-            reverbLoaded = true;
-            print('✅ REVERB PLUGIN LOADED: $path');
-            break;
-          } catch (e) {
-            print('❌ Failed to load reverb plugin at $path: $e');
-          }
-        }
-      }
-      
-      if (!reverbLoaded) {
-        throw Exception('🔥 HARD FAIL: No reverb VST3 plugin found! Required paths: ${reverbPaths.join(', ')}');
-      }
+      reverbPlugin = host.load(reverbPath);
+      print('✅ REVERB PLUGIN LOADED: $reverbPath');
       
       // Generate 100ms on/off pattern audio
       final duration = 4.0;
