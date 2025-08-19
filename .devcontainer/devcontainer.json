@@ -28,7 +28,7 @@
   },
   "postCreateCommand": [
     "bash", "-c", 
-    "echo 'Setting up development environment...' && make native && echo 'Dev container ready! Native library built successfully. Use make build for full build.'"
+    "echo 'Setting up development environment...' && echo 'Downloading VST3 SDK...' && curl -L -o vst3sdk.zip https://www.steinberg.net/vst3sdk && unzip vst3sdk.zip && mv VST_SDK/vst3sdk . && rm -rf VST_SDK vst3sdk.zip && echo 'VST3 SDK downloaded and extracted.' && make native && echo 'Dev container ready! Native library built successfully. Use make build for full build.'"
   ],
   "remoteUser": "vscode",
   "forwardPorts": [3000, 8080],
