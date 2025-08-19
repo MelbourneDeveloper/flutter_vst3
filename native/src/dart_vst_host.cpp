@@ -7,7 +7,6 @@
 // point buffers. MIDI note on/off events and parameter changes are
 // queued into the component prior to each process call.
 
-#define DART_VST_HOST_EXPORTS
 #include "dart_vst_host.h"
 
 #include <memory>
@@ -24,13 +23,15 @@
 #include "pluginterfaces/vst/ivstevents.h"
 #include "pluginterfaces/vst/vsttypes.h"
 #include "pluginterfaces/vst/vstspeaker.h"
+#include "pluginterfaces/vst/ivstmessage.h"
 
 #include "public.sdk/source/vst/hosting/module.h"
 #include "public.sdk/source/vst/hosting/plugprovider.h"
 #include "public.sdk/source/vst/hosting/hostclasses.h"
 #include "public.sdk/source/vst/hosting/parameterchanges.h"
 #include "public.sdk/source/vst/vsteventshelper.h"
-#include "public.sdk/source/vst/eventlist.h"
+#include "public.sdk/source/vst/hosting/eventlist.h"
+#include "public.sdk/source/vst/utility/stringconvert.h"
 
 using namespace Steinberg;
 using namespace Steinberg::Vst;
@@ -149,9 +150,9 @@ DVH_Plugin dvh_load_plugin(DVH_Host host, const char* module_path_utf8, const ch
 
   // Connect component and controller via IConnectionPoint if both
   // expose it. This is necessary for parameter automation to flow.
-  ps->component->queryInterface(IID_IConnectionPoint, (void**)&ps->compCP);
+  ps->component->queryInterface(IConnectionPoint::iid, (void**)&ps->compCP);
   if (ps->controller)
-    ps->controller->queryInterface(IID_IConnectionPoint, (void**)&ps->ctrlCP);
+    ps->controller->queryInterface(IConnectionPoint::iid, (void**)&ps->ctrlCP);
   if (ps->compCP && ps->ctrlCP) {
     ps->compCP->connect(ps->ctrlCP);
     ps->ctrlCP->connect(ps->compCP);
@@ -326,9 +327,9 @@ int32_t dvh_param_info(DVH_Plugin p, int32_t index,
   if (id_out) *id_out = (int32_t)pi.id;
   std::string title, units;
   {
-    auto t = VST3::StringConvert::convert(pi.title);
+    auto t = Steinberg::Vst::StringConvert::convert(pi.title);
     title = t;
-    auto u = VST3::StringConvert::convert(pi.units);
+    auto u = Steinberg::Vst::StringConvert::convert(pi.units);
     units = u;
   }
   copy_utf8(title, title_utf8, title_cap);

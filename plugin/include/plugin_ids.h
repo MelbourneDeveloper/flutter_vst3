@@ -7,6 +7,8 @@
 
 #pragma once
 #include "pluginterfaces/base/fplatform.h"
+#include "pluginterfaces/base/funknown.h"
+#include "pluginterfaces/vst/vsttypes.h"
 
 // com.yourorg.DartVstHost
 static const Steinberg::FUID kProcessorUID (0xA1B2C3D4, 0x00000001, 0x00000002, 0x00000003);

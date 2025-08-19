@@ -5,6 +5,10 @@
 
 #include "plugin_ids.h"
 #include "public.sdk/source/main/pluginfactory.h"
+#include "pluginterfaces/vst/ivstaudioprocessor.h"
+#include "pluginterfaces/vst/ivsteditcontroller.h"
+
+#define FULL_VERSION_STR "1.0.0"
 
 using namespace Steinberg;
 

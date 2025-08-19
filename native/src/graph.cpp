@@ -7,7 +7,6 @@
 // parameter automation. All functions are exposed via a C API for
 // consumption from Dart using FFI.
 
-#define DART_VST_HOST_EXPORTS
 #include "dvh_graph.h"
 #include "dart_vst_host.h"
 
@@ -18,6 +17,7 @@
 #include <cmath>
 #include <string>
 #include <unordered_map>
+#include <cstring>
 
 // A base class for all graph nodes. Subclasses implement audio
 // processing, note handling and parameter access. The default
