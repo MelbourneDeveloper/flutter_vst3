@@ -46,11 +46,10 @@ RUN git clone https://github.com/flutter/flutter.git -b stable /opt/flutter && \
 # Add Dart and Flutter to PATH
 ENV PATH="/usr/lib/dart/bin:/opt/flutter/bin:${PATH}"
 
-# Create VST3 SDK directory placeholder
-# Note: VST3 SDK must be mounted or downloaded separately due to Steinberg licensing
+# Download and install VST3 SDK
 WORKDIR /opt
-RUN mkdir -p /opt/vst3sdk && \
-    echo "VST3 SDK placeholder - mount your VST3 SDK here or download manually" > /opt/vst3sdk/README.txt
+RUN git clone --recursive https://github.com/steinbergmedia/vst3sdk.git && \
+    chown -R vscode:vscode /opt/vst3sdk
 
 # Set VST3_SDK_DIR environment variable
 ENV VST3_SDK_DIR=/opt/vst3sdk

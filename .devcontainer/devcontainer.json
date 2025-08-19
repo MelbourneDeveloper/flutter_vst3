@@ -26,7 +26,10 @@
       }
     }
   },
-  "postCreateCommand": "echo 'Dev container ready! Use make build to build the project.'",
+  "postCreateCommand": [
+    "bash", "-c", 
+    "echo 'Setting up development environment...' && make native && echo 'Dev container ready! Native library built successfully. Use make build for full build.'"
+  ],
   "remoteUser": "vscode",
   "forwardPorts": [3000, 8080],
   "features": {
