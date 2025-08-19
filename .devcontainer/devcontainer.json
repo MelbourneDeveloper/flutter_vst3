@@ -26,10 +26,7 @@
       }
     }
   },
-  "postCreateCommand": [
-    "bash", "-c", 
-    "set -e; echo 'Setting up development environment...'; if [ ! -d vst3sdk ]; then echo 'Downloading VST3 SDK...'; curl -L -o vst3sdk.zip https://www.steinberg.net/vst3sdk; unzip -q vst3sdk.zip; if [ -d VST_SDK/vst3sdk ]; then mv VST_SDK/vst3sdk .; rm -rf VST_SDK; fi; rm -f vst3sdk.zip; echo 'VST3 SDK downloaded and extracted.'; else echo 'VST3 SDK already exists, skipping download.'; fi; echo 'Downloading TAL VST3 plugins for testing...'; sudo mkdir -p /usr/lib/vst3 /opt/vst3; mkdir -p /workspace/vst_plugins /home/vscode/.vst3; echo 'Downloading TAL-Reverb-4...'; curl -L -o /tmp/tal-reverb.zip 'https://tal-software.com/downloads/plugins/TAL-Reverb-4_64_linux.zip' && cd /tmp && unzip -q tal-reverb.zip && ls -la && find . -name '*.vst3' -type d 2>/dev/null | head -1 | xargs -I {} sh -c 'sudo cp -r {} /usr/lib/vst3/TAL-Reverb-4.vst3 && cp -r {} /workspace/vst_plugins/TAL-Reverb-4.vst3 && cp -r {} /home/vscode/.vst3/TAL-Reverb-4.vst3 && sudo cp -r {} /opt/vst3/TAL-Reverb-4.vst3' && rm -rf /tmp/tal-reverb.zip /tmp/*.vst3; echo 'Downloading TAL-Dub-X...'; curl -L -o /tmp/tal-dub.zip 'https://tal-software.com/downloads/plugins/TAL-Dub-X_64_linux.zip' && cd /tmp && unzip -q tal-dub.zip && ls -la && find . -name '*.vst3' -type d 2>/dev/null | head -1 | xargs -I {} sh -c 'sudo cp -r {} /usr/lib/vst3/TAL-Dub-X.vst3 && cp -r {} /workspace/vst_plugins/TAL-Dub-X.vst3 && cp -r {} /home/vscode/.vst3/TAL-Dub-X.vst3 && sudo cp -r {} /opt/vst3/TAL-Dub-X.vst3' && rm -rf /tmp/tal-dub.zip /tmp/*.vst3; echo 'TAL VST3 plugins installed successfully!'; echo 'Building native library...'; cd /workspace && mkdir -p native/build && cd native/build && cmake .. && make && cp libdart_vst_host.* /workspace/; echo 'Dev container ready! Native library and TAL VST3 plugins installed for testing.'"
-  ],
+  "postCreateCommand": "./setup.sh",
   "remoteUser": "vscode",
   "forwardPorts": [3000, 8080],
   "features": {
