@@ -8,7 +8,7 @@ This dev container provides a complete development environment for the VST proje
 - **CMake 3.22+** for building C++ components
 - **Dart SDK** for Dart development
 - **Flutter SDK** for Flutter UI development
-- **VST3 SDK 3.7.11** pre-downloaded and configured
+- **VST3 SDK directory** prepared (you need to provide the SDK)
 - **Build tools** (GCC, Make, etc.)
 - **Audio development libraries** (ALSA, X11, etc.)
 
@@ -53,5 +53,15 @@ This should show all dependencies as available.
 
 If the container fails to build:
 1. Ensure Docker is running
-2. Check your internet connection (downloads VST3 SDK)
+2. Ensure you have the VST3 SDK available (see VST3 SDK Setup below)
 3. Try rebuilding: Command Palette → "Dev Containers: Rebuild Container"
+
+## VST3 SDK Setup
+
+The VST3 SDK is not automatically downloaded due to Steinberg's licensing requirements. You need to:
+
+1. Download the VST3 SDK from [Steinberg's Developer Portal](https://www.steinberg.net/developers/)
+2. Extract it and place the `vst3sdk` folder in your project root
+3. The container will automatically mount it to `/opt/vst3sdk`
+
+Alternatively, you can modify the devcontainer to mount your SDK from elsewhere on your system.

@@ -21,8 +21,9 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Dart SDK
-RUN wget -qO- https://dl-ssl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/dart.gpg && \
-    echo 'deb [signed-by=/usr/share/keyrings/dart.gpg arch=amd64] https://storage.googleapis.com/download.dartlang.org/linux/debian stable main' | tee /etc/apt/sources.list.d/dart_stable.list && \
+RUN ARCH=$(dpkg --print-architecture) && \
+    wget -qO- https://dl-ssl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/dart.gpg && \
+    echo "deb [signed-by=/usr/share/keyrings/dart.gpg arch=${ARCH}] https://storage.googleapis.com/download.dartlang.org/linux/debian stable main" | tee /etc/apt/sources.list.d/dart_stable.list && \
     apt-get update && \
     apt-get install -y dart && \
     rm -rf /var/lib/apt/lists/*
@@ -34,12 +35,11 @@ RUN git clone https://github.com/flutter/flutter.git -b stable /opt/flutter && \
 # Add Dart and Flutter to PATH
 ENV PATH="/usr/lib/dart/bin:/opt/flutter/bin:${PATH}"
 
-# Download and setup VST3 SDK
+# Create VST3 SDK directory placeholder
+# Note: VST3 SDK must be mounted or downloaded separately due to Steinberg licensing
 WORKDIR /opt
-RUN wget -O vst3sdk.zip "https://download.steinberg.net/sdk_downloads/vst-sdk_3.7.11_build-10_2023-12-14.zip" && \
-    unzip vst3sdk.zip && \
-    mv VST_SDK/vst3sdk /opt/vst3sdk && \
-    rm -rf vst3sdk.zip VST_SDK
+RUN mkdir -p /opt/vst3sdk && \
+    echo "VST3 SDK placeholder - mount your VST3 SDK here or download manually" > /opt/vst3sdk/README.txt
 
 # Set VST3_SDK_DIR environment variable
 ENV VST3_SDK_DIR=/opt/vst3sdk

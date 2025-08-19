@@ -26,7 +26,7 @@
       }
     }
   },
-  "postCreateCommand": "flutter doctor && dart --version && cmake --version && echo 'VST3_SDK_DIR='$VST3_SDK_DIR && ls -la $VST3_SDK_DIR",
+  "postCreateCommand": "echo 'Dev container ready! Use make build to build the project.'",
   "remoteUser": "vscode",
   "forwardPorts": [3000, 8080],
   "features": {
