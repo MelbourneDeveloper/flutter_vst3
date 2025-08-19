@@ -8,10 +8,39 @@ project(dart_vst_host LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+# Use the properly downloaded VST3 SDK
 if(NOT DEFINED ENV{VST3_SDK_DIR})
-  message(FATAL_ERROR "Set VST3_SDK_DIR to the root of Steinberg VST3 SDK")
+  set(VST3_SDK_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../vst3sdk)
+else()
+  set(VST3_SDK_DIR $ENV{VST3_SDK_DIR})
 endif()
-set(VST3_SDK_DIR $ENV{VST3_SDK_DIR})
+
+if(NOT EXISTS ${VST3_SDK_DIR}/CMakeLists.txt)
+  message(FATAL_ERROR "VST3 SDK not found at ${VST3_SDK_DIR}. Download it first.")
+endif()
+
+# Manually include VST3 sources - SDK requires CMake 3.25+ but we have 3.22
+file(GLOB_RECURSE VST3_BASE_SOURCES 
+  ${VST3_SDK_DIR}/base/source/*.cpp
+  ${VST3_SDK_DIR}/pluginterfaces/base/*.cpp
+  ${VST3_SDK_DIR}/pluginterfaces/vst/*.cpp
+  ${VST3_SDK_DIR}/pluginterfaces/gui/*.cpp
+)
+
+# Add core VST SDK sources - avoid duplicates
+file(GLOB VST3_SDK_SOURCES
+  ${VST3_SDK_DIR}/public.sdk/source/vst/vstbus.cpp
+  ${VST3_SDK_DIR}/public.sdk/source/vst/vstcomponent.cpp  
+  ${VST3_SDK_DIR}/public.sdk/source/vst/vstcomponentbase.cpp
+  ${VST3_SDK_DIR}/public.sdk/source/vst/vsteditcontroller.cpp
+  ${VST3_SDK_DIR}/public.sdk/source/vst/vstinitiids.cpp
+  ${VST3_SDK_DIR}/public.sdk/source/vst/vstnoteexpressiontypes.cpp
+  ${VST3_SDK_DIR}/public.sdk/source/vst/vstparameters.cpp
+  ${VST3_SDK_DIR}/public.sdk/source/vst/vstpresetfile.cpp
+  ${VST3_SDK_DIR}/public.sdk/source/vst/vstrepresentation.cpp
+  ${VST3_SDK_DIR}/public.sdk/source/vst/hosting/hostclasses.cpp
+  ${VST3_SDK_DIR}/public.sdk/source/common/pluginview.cpp
+)
 
 include_directories(
   ${VST3_SDK_DIR}
@@ -25,9 +54,14 @@ include_directories(
 add_library(dart_vst_host SHARED
   src/dart_vst_host.cpp
   src/graph.cpp
+  ${VST3_BASE_SOURCES}
+  ${VST3_SDK_SOURCES}
 )
 
-target_compile_definitions(dart_vst_host PRIVATE DART_VST_HOST_EXPORTS)
+target_compile_definitions(dart_vst_host PRIVATE 
+  DART_VST_HOST_EXPORTS
+  RELEASE=1
+)
 
 if(APPLE)
   find_library(COCOA_FRAMEWORK Cocoa)

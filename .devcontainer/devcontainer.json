@@ -7,7 +7,7 @@
   "workspaceFolder": "/workspace",
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
   "remoteEnv": {
-    "VST3_SDK_DIR": "/opt/vst3sdk",
+    "VST3_SDK_DIR": "/workspace/vst3sdk",
     "PATH": "/usr/lib/dart/bin:/opt/flutter/bin:${containerEnv:PATH}"
   },
   "customizations": {

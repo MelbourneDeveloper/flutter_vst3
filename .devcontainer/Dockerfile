@@ -46,13 +46,16 @@ RUN git clone https://github.com/flutter/flutter.git -b stable /opt/flutter && \
 # Add Dart and Flutter to PATH
 ENV PATH="/usr/lib/dart/bin:/opt/flutter/bin:${PATH}"
 
-# Download and install VST3 SDK
-WORKDIR /opt
-RUN git clone --recursive https://github.com/steinbergmedia/vst3sdk.git && \
-    chown -R vscode:vscode /opt/vst3sdk
+# Download and install VST3 SDK to workspace
+WORKDIR /workspace
+RUN curl -L -o vst3sdk.zip https://www.steinberg.net/vst3sdk && \
+    unzip vst3sdk.zip && \
+    mv VST_SDK/vst3sdk . && \
+    rm -rf VST_SDK vst3sdk.zip && \
+    chown -R vscode:vscode /workspace/vst3sdk
 
 # Set VST3_SDK_DIR environment variable
-ENV VST3_SDK_DIR=/opt/vst3sdk
+ENV VST3_SDK_DIR=/workspace/vst3sdk
 
 # Create workspace directory
 WORKDIR /workspace

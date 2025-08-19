@@ -12,3 +12,5 @@ node_modules/
 *.dylib
 *.zip
 .DS_Store
+
+vst3sdk/

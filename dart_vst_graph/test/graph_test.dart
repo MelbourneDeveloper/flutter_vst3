@@ -18,7 +18,8 @@ void main() {
 
   late VstGraph graph;
   setUp(() {
-    graph = VstGraph(sampleRate: 48000, maxBlock: 512);
+    final absolutePath = Directory.current.path + Platform.pathSeparator + libFile.path;
+    graph = VstGraph(sampleRate: 48000, maxBlock: 512, dylibPath: absolutePath);
   });
   tearDown(() {
     graph.dispose();

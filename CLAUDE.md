@@ -4,9 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 # Dart Rules
 - NO DUPLICATION. Move files, code elements instead of copying them. Search for elements before adding them.
-- NO THROWING EXCEPTIONS. Return nadz Result<> types except for unimplemented code
 - NO PLACEHOLDERS!!! If you HAVE TO leave a section blank, fail LOUDLY by throwing an exception.
-- FP style. No interfaces, classes, or mutable state. Pure functions with no side effects. Use Result types for error handling
+- FP style. No interfaces, classes, or mutable state. Pure functions with no side effects.
 - Tests must FAIL HARD. Don't add allowances and print warnings. Just FAIL!
 - Keep functions under 20 lines long.
 - NEVER use the late keyword
@@ -18,6 +17,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 
 This is a multi-component VST3 host and audio graph system written in Dart with native C++ components. The project enables loading VST3 plugins into a customizable audio graph that can be controlled from Dart and Flutter applications.
+
+Download Steinberg SDK here:
+https://www.steinberg.net/vst3sdk
+curl -L -o vst3sdk.zip https://www.steinberg.net/vst3sdk
 
 ### Core Components
 
