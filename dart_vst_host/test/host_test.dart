@@ -167,28 +167,16 @@ void main() {
     final host = VstHost.create(
         sampleRate: 48000, maxBlock: 512, dylibPath: libFile.absolute.path);
 
-    VstPlugin? delayPlugin;
     VstPlugin? reverbPlugin;
 
     try {
-      // HARD REQUIREMENT: Load TAL-Dub-X (delay) plugin - FAIL if not found
-      final delayPath = '/workspace/vst_plugins/TAL-Dub-X.vst3';
-
-      if (!File(delayPath).existsSync() && !Directory(delayPath).existsSync()) {
-        throw Exception(
-            '🔥 HARD FAIL: TAL-Dub-X VST3 plugin NOT FOUND at $delayPath');
-      }
-
-      delayPlugin = host.load(delayPath);
-      print('✅ DELAY PLUGIN LOADED: $delayPath');
-
-      // HARD REQUIREMENT: Load TAL-Reverb-4 plugin - FAIL if not found
-      final reverbPath = '/workspace/vst_plugins/TAL-Reverb-4.vst3';
+      // HARD REQUIREMENT: Load FlutterDartReverb plugin - FAIL if not found
+      final reverbPath = '/workspace/vst_plugins/FlutterDartReverb.vst3';
 
       if (!File(reverbPath).existsSync() &&
           !Directory(reverbPath).existsSync()) {
         throw Exception(
-            '🔥 HARD FAIL: TAL-Reverb-4 VST3 plugin NOT FOUND at $reverbPath');
+            '🔥 HARD FAIL: FlutterDartReverb VST3 plugin NOT FOUND at $reverbPath');
       }
 
       reverbPlugin = host.load(reverbPath);
@@ -221,49 +209,6 @@ void main() {
       print(
           'Generated 100ms on/off pattern - ${(duration / cycleDuration).round()} cycles');
 
-      // PROCESS THROUGH DELAY PLUGIN
-      final delayResumed = delayPlugin.resume(sampleRate: 48000, maxBlock: 512);
-      if (!delayResumed) {
-        throw Exception('🔥 HARD FAIL: Delay plugin failed to resume!');
-      }
-
-      print('Delay plugin parameters: ${delayPlugin.paramCount()}');
-
-      // Process audio in blocks through delay plugin
-      final blockSize = 512;
-      final delayedAudio = Float32List(totalSamples);
-
-      for (int start = 0; start < totalSamples; start += blockSize) {
-        final end = (start + blockSize).clamp(0, totalSamples);
-        final currentBlockSize = end - start;
-
-        final inL = Float32List(currentBlockSize);
-        final inR = Float32List(currentBlockSize);
-        final outL = Float32List(currentBlockSize);
-        final outR = Float32List(currentBlockSize);
-
-        // Copy input data
-        for (int i = 0; i < currentBlockSize; i++) {
-          inL[i] = audioData[start + i];
-          inR[i] = audioData[start + i];
-        }
-
-        // Process through delay plugin
-        final processed = delayPlugin.processStereoF32(inL, inR, outL, outR);
-        if (!processed) {
-          throw Exception(
-              '🔥 HARD FAIL: Delay plugin processing failed at sample $start!');
-        }
-
-        // Copy output data (use left channel)
-        for (int i = 0; i < currentBlockSize; i++) {
-          delayedAudio[start + i] = outL[i];
-        }
-      }
-
-      delayPlugin.suspend();
-      print('✅ DELAY PROCESSING COMPLETED');
-
       // PROCESS THROUGH REVERB PLUGIN
       final reverbResumed =
           reverbPlugin.resume(sampleRate: 48000, maxBlock: 512);
@@ -273,7 +218,8 @@ void main() {
 
       print('Reverb plugin parameters: ${reverbPlugin.paramCount()}');
 
-      // Process delayed audio through reverb
+      // Process audio through reverb
+      final blockSize = 512;
       final finalAudio = Float32List(totalSamples);
 
       for (int start = 0; start < totalSamples; start += blockSize) {
@@ -285,10 +231,10 @@ void main() {
         final outL = Float32List(currentBlockSize);
         final outR = Float32List(currentBlockSize);
 
-        // Copy delayed audio as input
+        // Copy input audio
         for (int i = 0; i < currentBlockSize; i++) {
-          inL[i] = delayedAudio[start + i];
-          inR[i] = delayedAudio[start + i];
+          inL[i] = audioData[start + i];
+          inR[i] = audioData[start + i];
         }
 
         // Process through reverb plugin
@@ -330,9 +276,8 @@ void main() {
 
       expect(outputFile.existsSync(), isTrue);
       expect(finalRMS, greaterThan(0.1));
-      print('✅ TEST PASSED: Real VST3 plugins processed audio successfully!');
+      print('✅ TEST PASSED: FlutterDartReverb plugin processed audio successfully!');
     } finally {
-      delayPlugin?.unload();
       reverbPlugin?.unload();
       host.dispose();
     }

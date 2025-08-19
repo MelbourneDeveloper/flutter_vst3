@@ -1,20 +1,26 @@
 # Dart VST3 Toolkit Makefile
 # Builds VST3 plugins from pure Dart source code
 
-.PHONY: all build test clean clean-native clean-plugin help dart-deps flutter-deps reverb-vst install
+.PHONY: all build test clean clean-native clean-plugin help dart-deps flutter-deps reverb-vst install reverb reverb-build-only
 
 # Default target - build the Flutter Dart Reverb VST3
-all: reverb-vst
+all: reverb
 
 # Build all components (host, graph, and reverb VST)
 build: native plugin dart-deps flutter-deps reverb-vst
 
 # Build the Flutter Dart Reverb VST3 plugin
-reverb-vst: native reverb-deps
+reverb: native reverb-deps
 	@echo "Building Flutter Dart Reverb VST3 plugin..."
 	@mkdir -p plugin/build
 	@cd plugin/build && cmake .. && make
 	@echo "✅ VST3 plugin built: plugin/build/FlutterDartReverb.vst3"
+
+# Alias for reverb
+reverb-vst: reverb
+
+# Build reverb VST3 without installing (explicit build-only target)
+reverb-build-only: reverb
 
 # Run all tests
 test: build
@@ -130,6 +136,7 @@ help:
 	@echo ""
 	@echo "🎛️ REVERB VST TARGETS:"
 	@echo "  reverb-vst      - Build Flutter Dart Reverb VST3 plugin"
+	@echo "  reverb-build-only - Build Flutter Dart Reverb VST3 plugin (no install)"
 	@echo "  reverb-deps     - Install reverb plugin dependencies only" 
 	@echo "  install         - Build and install VST3 plugin to system"
 	@echo ""
