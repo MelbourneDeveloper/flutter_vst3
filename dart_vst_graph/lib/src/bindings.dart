@@ -5,6 +5,7 @@
 
 import 'dart:ffi';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:ffi/ffi.dart';
 
 typedef _GraphCreateC = Pointer<Void> Function(Double, Int32);
