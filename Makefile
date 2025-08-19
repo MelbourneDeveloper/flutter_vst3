@@ -12,9 +12,9 @@ build: native plugin dart-deps flutter-deps
 # Run all tests
 test: build
 	@echo "Running dart_vst_host tests..."
-	dart test --working-directory=/workspace/dart_vst_host
+	cd dart_vst_host && dart test
 	@echo "Running dart_vst_graph tests..."
-	dart test --working-directory=/workspace/dart_vst_graph
+	cd dart_vst_graph && dart test
 
 # Build native library (required for all Dart components)
 native: clean-native
@@ -23,8 +23,10 @@ native: clean-native
 	mkdir -p /workspace/native/build
 	cmake -S /workspace/native -B /workspace/native/build
 	make -C /workspace/native/build
-	@echo "Copying native library to project root..."
+	@echo "Copying native library to all required locations..."
 	cp /workspace/native/build/libdart_vst_host.* /workspace/ 2>/dev/null || true
+	cp /workspace/native/build/libdart_vst_host.* /workspace/dart_vst_host/ 2>/dev/null || true
+	cp /workspace/native/build/libdart_vst_host.* /workspace/dart_vst_graph/ 2>/dev/null || true
 
 # Build VST3 plugin
 plugin: native clean-plugin
@@ -48,9 +50,11 @@ flutter-deps:
 
 # Clean all build artifacts
 clean: clean-native clean-plugin
-	@echo "Removing native libraries from project root..."
+	@echo "Removing native libraries from all locations..."
 	rm -f libdart_vst_host.*
 	rm -f *.dylib *.so *.dll
+	rm -f dart_vst_host/libdart_vst_host.*
+	rm -f dart_vst_graph/libdart_vst_host.*
 
 # Clean native library build
 clean-native:
