@@ -1,0 +1,35 @@
+{
+  "name": "VST Development Environment",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "."
+  },
+  "workspaceFolder": "/workspace",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
+  "remoteEnv": {
+    "VST3_SDK_DIR": "/opt/vst3sdk",
+    "PATH": "/usr/lib/dart/bin:/opt/flutter/bin:${containerEnv:PATH}"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "Dart-Code.dart-code",
+        "Dart-Code.flutter",
+        "ms-vscode.cpptools",
+        "ms-vscode.cmake-tools",
+        "ms-vscode.makefile-tools"
+      ],
+      "settings": {
+        "dart.flutterSdkPath": "/opt/flutter",
+        "dart.sdkPath": "/usr/lib/dart",
+        "cmake.configureOnOpen": false
+      }
+    }
+  },
+  "postCreateCommand": "flutter doctor && dart --version && cmake --version && echo 'VST3_SDK_DIR='$VST3_SDK_DIR && ls -la $VST3_SDK_DIR",
+  "remoteUser": "vscode",
+  "forwardPorts": [3000, 8080],
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {}
+  }
+}
