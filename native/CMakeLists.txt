@@ -54,10 +54,12 @@ include_directories(
 )
 
 # List source files. Both the core host and graph are built into
-# the same library to simplify linking from Dart.
+# the same library to simplify linking from Dart. Also includes
+# the dart_reverb_bridge for flutter_reverb VST3 plugin support.
 add_library(dart_vst_host SHARED
   src/dart_vst_host.cpp
   src/graph.cpp
+  src/dart_reverb_bridge.cpp
   ${VST3_BASE_SOURCES}
   ${VST3_SDK_SOURCES}
 )

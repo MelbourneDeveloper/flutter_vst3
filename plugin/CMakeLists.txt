@@ -1,9 +1,10 @@
 cmake_minimum_required(VERSION 3.20)
-project(dart_vst_host_plugin LANGUAGES CXX)
+project(flutter_dart_reverb_plugin LANGUAGES CXX)
 
-# Build a VST3 plug‑in that hosts the Dart VST graph. This uses the
-# Steinberg SDK and the core dart_vst_host library. On macOS the
-# output will be a bundle with extension .vst3.
+# Build the Flutter Dart Reverb VST3 plugin. This uses pure Dart audio
+# processing from the flutter_reverb package via FFI bridge, implementing
+# a complete VST3 reverb plugin powered by Dart. On macOS the output
+# will be a bundle with extension .vst3.
 
 set(CMAKE_CXX_STANDARD 17)
 
@@ -28,24 +29,33 @@ include_directories(
   ../native/include
 )
 
-add_library(dvh_plugin MODULE
-  src/factory.cpp
-  src/plugin_processor.cpp
-  src/plugin_controller.cpp
-  src/plugin_view.cpp
+add_library(flutter_dart_reverb MODULE
+  src/dart_reverb_factory.cpp
+  src/dart_reverb_processor.cpp
+  src/dart_reverb_controller.cpp
+  ../native/src/dart_reverb_bridge.cpp
 )
 
-set_target_properties(dvh_plugin PROPERTIES
-  BUNDLE TRUE
-  BUNDLE_EXTENSION vst3
-)
+if(APPLE)
+  set_target_properties(flutter_dart_reverb PROPERTIES
+    BUNDLE TRUE
+    BUNDLE_EXTENSION vst3
+    OUTPUT_NAME "FlutterDartReverb"
+  )
+else()
+  set_target_properties(flutter_dart_reverb PROPERTIES
+    OUTPUT_NAME "FlutterDartReverb"
+    PREFIX ""
+    SUFFIX ".vst3"
+  )
+endif()
 
-target_link_libraries(dvh_plugin
+target_link_libraries(flutter_dart_reverb
   ${CMAKE_DL_LIBS}
   /workspace/native/build/libdart_vst_host.so
 )
 
 if(APPLE)
   find_library(COCOA_FRAMEWORK Cocoa)
-  target_link_libraries(dvh_plugin ${COCOA_FRAMEWORK})
+  target_link_libraries(flutter_dart_reverb ${COCOA_FRAMEWORK})
 endif()
