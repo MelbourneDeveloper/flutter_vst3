@@ -152,20 +152,76 @@ void main() {
     }
   });
 
-  test('audio effects processing - 100ms on/off with delay and reverb', () {
+  test('VST3 FX processing - MUST load real plugins or FAIL HARD', () {
     final host = VstHost.create(
       sampleRate: 48000, 
       maxBlock: 512, 
       dylibPath: libFile.absolute.path
     );
+    
+    VstPlugin? delayPlugin;
+    VstPlugin? reverbPlugin;
+    
     try {
-      // Create a 100ms on, 100ms off pattern for 4 seconds
-      final duration = 4.0; // 4 seconds total
+      // HARD REQUIREMENT: Load delay plugin - FAIL if not found
+      final delayPaths = [
+        '/usr/lib/vst3/ChowMatrix.vst3',
+        '/home/vscode/.vst3/ChowMatrix.vst3',
+        '/workspace/vst_plugins/ChowMatrix.vst3',
+        '/opt/vst3/ChowMatrix.vst3',
+      ];
+      
+      bool delayLoaded = false;
+      for (final path in delayPaths) {
+        if (File(path).existsSync()) {
+          try {
+            delayPlugin = host.load(path);
+            delayLoaded = true;
+            print('✅ DELAY PLUGIN LOADED: $path');
+            break;
+          } catch (e) {
+            print('❌ Failed to load delay plugin at $path: $e');
+          }
+        }
+      }
+      
+      if (!delayLoaded) {
+        throw Exception('🔥 HARD FAIL: No delay VST3 plugin found! Required paths: ${delayPaths.join(', ')}');
+      }
+      
+      // HARD REQUIREMENT: Load reverb plugin - FAIL if not found  
+      final reverbPaths = [
+        '/usr/lib/vst3/DragonflyHallReverb.vst3',
+        '/home/vscode/.vst3/DragonflyHallReverb.vst3', 
+        '/workspace/vst_plugins/DragonflyHallReverb.vst3',
+        '/opt/vst3/DragonflyHallReverb.vst3',
+      ];
+      
+      bool reverbLoaded = false;
+      for (final path in reverbPaths) {
+        if (File(path).existsSync()) {
+          try {
+            reverbPlugin = host.load(path);
+            reverbLoaded = true;
+            print('✅ REVERB PLUGIN LOADED: $path');
+            break;
+          } catch (e) {
+            print('❌ Failed to load reverb plugin at $path: $e');
+          }
+        }
+      }
+      
+      if (!reverbLoaded) {
+        throw Exception('🔥 HARD FAIL: No reverb VST3 plugin found! Required paths: ${reverbPaths.join(', ')}');
+      }
+      
+      // Generate 100ms on/off pattern audio
+      final duration = 4.0;
       final sampleRate = 48000;
       final totalSamples = (duration * sampleRate).round();
       final onDuration = 0.1; // 100ms on
       final offDuration = 0.1; // 100ms off
-      final cycleDuration = onDuration + offDuration; // 200ms cycle
+      final cycleDuration = onDuration + offDuration;
       final onSamples = (onDuration * sampleRate).round();
       final cycleSamples = (cycleDuration * sampleRate).round();
       
@@ -179,79 +235,120 @@ void main() {
         if (isOn) {
           audioData[i] = 0.5 * sin(2 * pi * 440 * i / sampleRate);
         } else {
-          audioData[i] = 0.0; // silence during off periods
+          audioData[i] = 0.0;
         }
       }
       
-      print('Generated 100ms on/off pattern audio');
-      print('Total duration: ${duration}s, Cycles: ${(duration / cycleDuration).round()}');
-      print('On samples per cycle: $onSamples, Total samples: $totalSamples');
+      print('Generated 100ms on/off pattern - ${(duration / cycleDuration).round()} cycles');
       
-      // Apply simple delay effect (simulate 150ms delay)
-      final delayMs = 150.0;
-      final delaySamples = (delayMs * sampleRate / 1000).round();
+      // PROCESS THROUGH DELAY PLUGIN
+      final delayResumed = delayPlugin!.resume(sampleRate: 48000, maxBlock: 512);
+      if (!delayResumed) {
+        throw Exception('🔥 HARD FAIL: Delay plugin failed to resume!');
+      }
+      
+      print('Delay plugin parameters: ${delayPlugin.paramCount()}');
+      
+      // Process audio in blocks through delay plugin
+      final blockSize = 512;
       final delayedAudio = Float32List(totalSamples);
-      final feedbackGain = 0.3;
       
-      for (int i = 0; i < totalSamples; i++) {
-        delayedAudio[i] = audioData[i];
-        if (i >= delaySamples) {
-          // Add delayed signal with feedback
-          delayedAudio[i] += delayedAudio[i - delaySamples] * feedbackGain;
-        }
-      }
-      
-      print('Applied delay effect: ${delayMs}ms delay with ${feedbackGain * 100}% feedback');
-      
-      // Apply simple reverb effect (simulate room reverb)
-      final reverbAudio = Float32List(totalSamples);
-      final reverbDecay = 0.5;
-      final reverbDelay1 = (37 * sampleRate / 1000).round(); // 37ms
-      final reverbDelay2 = (89 * sampleRate / 1000).round(); // 89ms
-      final reverbDelay3 = (127 * sampleRate / 1000).round(); // 127ms
-      
-      for (int i = 0; i < totalSamples; i++) {
-        reverbAudio[i] = delayedAudio[i];
+      for (int start = 0; start < totalSamples; start += blockSize) {
+        final end = (start + blockSize).clamp(0, totalSamples);
+        final currentBlockSize = end - start;
         
-        // Add multiple delay taps for reverb simulation
-        if (i >= reverbDelay1) {
-          reverbAudio[i] += reverbAudio[i - reverbDelay1] * reverbDecay * 0.3;
+        final inL = Float32List(currentBlockSize);
+        final inR = Float32List(currentBlockSize);
+        final outL = Float32List(currentBlockSize);
+        final outR = Float32List(currentBlockSize);
+        
+        // Copy input data
+        for (int i = 0; i < currentBlockSize; i++) {
+          inL[i] = audioData[start + i];
+          inR[i] = audioData[start + i];
         }
-        if (i >= reverbDelay2) {
-          reverbAudio[i] += reverbAudio[i - reverbDelay2] * reverbDecay * 0.2;
+        
+        // Process through delay plugin
+        final processed = delayPlugin.processStereoF32(inL, inR, outL, outR);
+        if (!processed) {
+          throw Exception('🔥 HARD FAIL: Delay plugin processing failed at sample $start!');
         }
-        if (i >= reverbDelay3) {
-          reverbAudio[i] += reverbAudio[i - reverbDelay3] * reverbDecay * 0.1;
+        
+        // Copy output data (use left channel)
+        for (int i = 0; i < currentBlockSize; i++) {
+          delayedAudio[start + i] = outL[i];
         }
       }
       
-      print('Applied reverb effect: Multi-tap reverb with ${reverbDecay * 100}% decay');
+      delayPlugin.suspend();
+      print('✅ DELAY PROCESSING COMPLETED');
       
-      // Normalize to prevent clipping
-      final maxSample = reverbAudio.fold(0.0, (max, sample) => sample.abs() > max ? sample.abs() : max);
-      if (maxSample > 0.95) {
-        final normalizeGain = 0.95 / maxSample;
-        for (int i = 0; i < totalSamples; i++) {
-          reverbAudio[i] *= normalizeGain;
-        }
-        print('Normalized audio by ${normalizeGain.toStringAsFixed(3)}x to prevent clipping');
+      // PROCESS THROUGH REVERB PLUGIN
+      final reverbResumed = reverbPlugin!.resume(sampleRate: 48000, maxBlock: 512);
+      if (!reverbResumed) {
+        throw Exception('🔥 HARD FAIL: Reverb plugin failed to resume!');
       }
+      
+      print('Reverb plugin parameters: ${reverbPlugin.paramCount()}');
+      
+      // Process delayed audio through reverb
+      final finalAudio = Float32List(totalSamples);
+      
+      for (int start = 0; start < totalSamples; start += blockSize) {
+        final end = (start + blockSize).clamp(0, totalSamples);
+        final currentBlockSize = end - start;
+        
+        final inL = Float32List(currentBlockSize);
+        final inR = Float32List(currentBlockSize);
+        final outL = Float32List(currentBlockSize);
+        final outR = Float32List(currentBlockSize);
+        
+        // Copy delayed audio as input
+        for (int i = 0; i < currentBlockSize; i++) {
+          inL[i] = delayedAudio[start + i];
+          inR[i] = delayedAudio[start + i];
+        }
+        
+        // Process through reverb plugin
+        final processed = reverbPlugin.processStereoF32(inL, inR, outL, outR);
+        if (!processed) {
+          throw Exception('🔥 HARD FAIL: Reverb plugin processing failed at sample $start!');
+        }
+        
+        // Copy output data (use left channel)
+        for (int i = 0; i < currentBlockSize; i++) {
+          finalAudio[start + i] = outL[i];
+        }
+      }
+      
+      reverbPlugin.suspend();
+      print('✅ REVERB PROCESSING COMPLETED');
       
       // Save the processed audio
-      final outputFile = File('/workspace/test_fx_audio_100ms_pattern.wav');
-      final wavData = _createWavFile(reverbAudio, sampleRate);
+      final outputFile = File('/workspace/test_vst3_fx_audio.wav');
+      final wavData = _createWavFile(finalAudio, sampleRate);
       outputFile.writeAsBytesSync(wavData);
       
-      print('Processed audio saved to: ${outputFile.path}');
-      print('File size: ${outputFile.lengthSync()} bytes');
-      print('Final RMS: ${sqrt(reverbAudio.map((x) => x * x).reduce((a, b) => a + b) / totalSamples)}');
-      print('Audio FX processing completed - download the file to hear the 100ms on/off pattern with delay and reverb!');
+      final finalRMS = sqrt(finalAudio.map((x) => x * x).reduce((a, b) => a + b) / totalSamples);
       
-      // Verify the pattern exists
-      expect(reverbAudio.any((sample) => sample.abs() > 0.1), isTrue);
+      print('🎵 REAL VST3 FX PROCESSING COMPLETED!');
+      print('Output file: ${outputFile.path}');
+      print('File size: ${outputFile.lengthSync()} bytes');
+      print('Final RMS: $finalRMS');
+      
+      // HARD VERIFICATION - output must be different from input
+      final inputRMS = sqrt(audioData.map((x) => x * x).reduce((a, b) => a + b) / totalSamples);
+      if ((finalRMS - inputRMS).abs() < 0.01) {
+        throw Exception('🔥 HARD FAIL: VST3 effects had no audible impact! Input RMS: $inputRMS, Output RMS: $finalRMS');
+      }
+      
       expect(outputFile.existsSync(), isTrue);
+      expect(finalRMS, greaterThan(0.1));
+      print('✅ TEST PASSED: Real VST3 plugins processed audio successfully!');
       
     } finally {
+      delayPlugin?.unload();
+      reverbPlugin?.unload();
       host.dispose();
     }
   });
