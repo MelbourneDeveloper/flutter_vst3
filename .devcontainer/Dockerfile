@@ -18,6 +18,7 @@ RUN apt-get update && apt-get install -y \
     libxinerama-dev \
     libxcursor-dev \
     libfreetype6-dev \
+    sudo \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js and npm
@@ -33,9 +34,14 @@ RUN ARCH=$(dpkg --print-architecture) && \
     apt-get install -y dart && \
     rm -rf /var/lib/apt/lists/*
 
-# Install Flutter
+# Set user for development first
+RUN useradd -m -s /bin/bash vscode && \
+    echo "vscode ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+# Install Flutter and fix ownership
 RUN git clone https://github.com/flutter/flutter.git -b stable /opt/flutter && \
-    /opt/flutter/bin/flutter doctor
+    chown -R vscode:vscode /opt/flutter && \
+    sudo -u vscode /opt/flutter/bin/flutter doctor
 
 # Add Dart and Flutter to PATH
 ENV PATH="/usr/lib/dart/bin:/opt/flutter/bin:${PATH}"
@@ -51,10 +57,6 @@ ENV VST3_SDK_DIR=/opt/vst3sdk
 
 # Create workspace directory
 WORKDIR /workspace
-
-# Set user for development
-RUN useradd -m -s /bin/bash vscode && \
-    echo "vscode ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
 # Install Claude Code globally
 RUN npm install -g @anthropic-ai/claude-code
