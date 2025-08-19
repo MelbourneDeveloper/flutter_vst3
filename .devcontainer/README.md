@@ -11,6 +11,8 @@ This dev container provides a complete development environment for the VST proje
 - **VST3 SDK directory** prepared (you need to provide the SDK)
 - **Build tools** (GCC, Make, etc.)
 - **Audio development libraries** (ALSA, X11, etc.)
+- **Node.js and npm** for package management
+- **Claude Code** pre-installed globally
 
 ## Usage
 

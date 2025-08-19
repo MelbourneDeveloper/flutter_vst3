@@ -20,6 +20,11 @@ RUN apt-get update && apt-get install -y \
     libfreetype6-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Install Node.js and npm
+RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - && \
+    apt-get install -y nodejs && \
+    rm -rf /var/lib/apt/lists/*
+
 # Install Dart SDK
 RUN ARCH=$(dpkg --print-architecture) && \
     wget -qO- https://dl-ssl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/dart.gpg && \
@@ -50,6 +55,9 @@ WORKDIR /workspace
 # Set user for development
 RUN useradd -m -s /bin/bash vscode && \
     echo "vscode ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+# Install Claude Code globally
+RUN npm install -g @anthropic-ai/claude-code
 
 USER vscode
 WORKDIR /workspace
