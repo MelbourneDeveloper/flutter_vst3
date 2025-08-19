@@ -12,6 +12,8 @@
 #include <thread>
 #include <atomic>
 #include <string>
+#include <unistd.h>
+#include <sys/wait.h>
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -58,7 +60,6 @@ public:
   tresult PLUGIN_API checkSizeConstraint(ViewRect*) override { return kResultTrue; }
 
   REFCOUNT_METHODS(FObject)
-  DELEGATE_REFCOUNT(FObject)
   tresult PLUGIN_API queryInterface(const TUID iid, void** obj) override {
     QUERY_INTERFACE(iid, obj, IPlugView::iid, IPlugView)
     return FObject::queryInterface(iid, obj);

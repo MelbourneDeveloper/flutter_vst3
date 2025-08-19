@@ -7,6 +7,17 @@ project(dart_vst_host_plugin LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 
+# Set build type and debug flags
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
+
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+  add_compile_definitions(_DEBUG)
+else()
+  add_compile_definitions(NDEBUG RELEASE)
+endif()
+
 set(VST3_SDK_DIR $ENV{VST3_SDK_DIR})
 
 include_directories(
@@ -31,7 +42,7 @@ set_target_properties(dvh_plugin PROPERTIES
 
 target_link_libraries(dvh_plugin
   ${CMAKE_DL_LIBS}
-  dart_vst_host
+  /workspace/native/build/libdart_vst_host.so
 )
 
 if(APPLE)

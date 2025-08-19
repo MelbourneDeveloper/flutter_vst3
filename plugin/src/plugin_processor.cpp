@@ -16,6 +16,8 @@
 
 #include "dvh_graph.h"
 
+#define FULL_VERSION_STR "1.0.0"
+
 using namespace Steinberg;
 using namespace Steinberg::Vst;
 
@@ -147,23 +149,13 @@ public:
     return kResultTrue;
   }
 
-  static FUnknown* createInstance(void*) { return (IAudioProcessor*)new DvhProcessor(); }
-
 private:
   DVH_Graph graph_{nullptr};
   ProcessSetup setup_{};
   int32_t gainNode_ = -1;
 };
 
-BEGIN_FACTORY_DEF("YourOrg", "https://your.org", "support@your.org")
-
-DEF_CLASS2(INLINE_UID_FROM_FUID(kProcessorUID),
-  PClassInfo::kManyInstances,
-  kVstAudioEffectClass,
-  "DartVstHost",
-  Vst::kDistributable | Vst::kSimpleModeSupported,
-  "Instrument|Fx",
-  FULL_VERSION_STR, kVstVersionString,
-  DvhProcessor::createInstance)
-
-END_FACTORY
+// Factory function for the processor
+FUnknown* createDvhProcessor(void*) { 
+  return (IAudioProcessor*)new DvhProcessor(); 
+}

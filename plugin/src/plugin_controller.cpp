@@ -6,6 +6,8 @@
 
 #include "plugin_ids.h"
 #include "public.sdk/source/vst/vsteditcontroller.h"
+#include "public.sdk/source/vst/vstparameters.h"
+#include "pluginterfaces/base/ustring.h"
 
 using namespace Steinberg;
 using namespace Steinberg::Vst;
@@ -23,17 +25,9 @@ public:
     return kResultTrue;
   }
 
-  static FUnknown* createInstance(void*) { return (IEditController*)new DvhController(); }
 };
 
-BEGIN_FACTORY_DEF("YourOrg", "https://your.org", "support@your.org")
-
-DEF_CLASS2(INLINE_UID_FROM_FUID(kControllerUID),
-  PClassInfo::kManyInstances,
-  kVstComponentControllerClass,
-  "DartVstHostController",
-  0, "",
-  FULL_VERSION_STR, kVstVersionString,
-  DvhController::createInstance)
-
-END_FACTORY
+// Factory function for the controller
+FUnknown* createDvhController(void*) { 
+  return (IEditController*)new DvhController(); 
+}
