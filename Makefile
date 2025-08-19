@@ -12,35 +12,39 @@ build: native plugin dart-deps flutter-deps
 # Run all tests
 test: build
 	@echo "Running dart_vst_host tests..."
-	cd dart_vst_host && dart test
+	dart test --working-directory=/workspace/dart_vst_host
 	@echo "Running dart_vst_graph tests..."
-	cd dart_vst_graph && dart test
+	dart test --working-directory=/workspace/dart_vst_graph
 
 # Build native library (required for all Dart components)
 native: clean-native
 	@echo "Building native library..."
 	@test -n "$(VST3_SDK_DIR)" || (echo "Error: VST3_SDK_DIR environment variable not set" && echo "Please set it to the root of Steinberg VST3 SDK" && exit 1)
-	cd native && mkdir -p build && cd build && cmake .. && make
+	mkdir -p /workspace/native/build
+	cmake -S /workspace/native -B /workspace/native/build
+	make -C /workspace/native/build
 	@echo "Copying native library to project root..."
-	cp native/build/libdart_vst_host.* ./ 2>/dev/null || true
+	cp /workspace/native/build/libdart_vst_host.* /workspace/ 2>/dev/null || true
 
 # Build VST3 plugin
 plugin: native clean-plugin
 	@echo "Building VST3 plugin..."
 	@test -n "$(VST3_SDK_DIR)" || (echo "Error: VST3_SDK_DIR environment variable not set" && echo "Please set it to the root of Steinberg VST3 SDK" && exit 1)
-	cd plugin && mkdir -p build && cd build && cmake .. && make
+	mkdir -p /workspace/plugin/build
+	cmake -S /workspace/plugin -B /workspace/plugin/build
+	make -C /workspace/plugin/build
 
 # Install Dart dependencies
 dart-deps:
 	@echo "Installing dart_vst_host dependencies..."
-	cd dart_vst_host && dart pub get
+	dart pub get --directory=/workspace/dart_vst_host
 	@echo "Installing dart_vst_graph dependencies..."
-	cd dart_vst_graph && dart pub get
+	dart pub get --directory=/workspace/dart_vst_graph
 
 # Install Flutter dependencies
 flutter-deps:
 	@echo "Installing Flutter dependencies..."
-	cd flutter_ui && flutter pub get
+	flutter pub get --directory=/workspace/flutter_ui
 
 # Clean all build artifacts
 clean: clean-native clean-plugin
@@ -51,12 +55,12 @@ clean: clean-native clean-plugin
 # Clean native library build
 clean-native:
 	@echo "Cleaning native build..."
-	rm -rf native/build
+	rm -rf /workspace/native/build
 
 # Clean plugin build
 clean-plugin:
 	@echo "Cleaning plugin build..."
-	rm -rf plugin/build
+	rm -rf /workspace/plugin/build
 
 # Run Flutter app
 run-flutter: flutter-deps
