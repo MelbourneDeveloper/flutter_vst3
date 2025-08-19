@@ -14,7 +14,11 @@ void main() {
   }
 
   test('load missing plug‑in throws', () {
-    final host = VstHost.create(sampleRate: 48000, maxBlock: 512);
+    final host = VstHost.create(
+      sampleRate: 48000, 
+      maxBlock: 512, 
+      dylibPath: libFile.absolute.path
+    );
     try {
       expect(() => host.load('/nonexistent/plugin.vst3'), throwsA(isA<StateError>()));
     } finally {
