@@ -13,8 +13,7 @@ void main() {
           : File('libdart_vst_host.so');
 
   if (!libFile.existsSync()) {
-    // Skip tests gracefully when the native library is absent.
-    return;
+    throw Exception('Native library ${libFile.path} not found! Build the native library first.');
   }
 
   late VstGraph graph;
