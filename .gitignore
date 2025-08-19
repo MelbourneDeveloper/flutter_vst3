@@ -1,0 +1,14 @@
+# Ignore build products
+build/
+.dart_tool/
+.idea/
+.vscode/
+*.iml
+*.pyc
+__pycache__/
+node_modules/
+*.dll
+*.so
+*.dylib
+*.zip
+.DS_Store
