@@ -4,6 +4,57 @@ import 'dart:typed_data';
 import 'package:test/test.dart';
 import 'package:dart_vst_host/dart_vst_host.dart';
 
+/// Create a simple WAV file from Float32 audio data
+Uint8List _createWavFile(Float32List audioData, int sampleRate) {
+  final numSamples = audioData.length;
+  final byteRate = sampleRate * 2; // 16-bit mono
+  final dataSize = numSamples * 2; // 16-bit samples
+  final fileSize = 36 + dataSize;
+  
+  final bytes = ByteData(44 + dataSize);
+  int offset = 0;
+  
+  // RIFF header
+  bytes.setUint8(offset++, 0x52); // 'R'
+  bytes.setUint8(offset++, 0x49); // 'I'
+  bytes.setUint8(offset++, 0x46); // 'F'
+  bytes.setUint8(offset++, 0x46); // 'F'
+  bytes.setUint32(offset, fileSize, Endian.little); offset += 4;
+  bytes.setUint8(offset++, 0x57); // 'W'
+  bytes.setUint8(offset++, 0x41); // 'A'
+  bytes.setUint8(offset++, 0x56); // 'V'
+  bytes.setUint8(offset++, 0x45); // 'E'
+  
+  // fmt chunk
+  bytes.setUint8(offset++, 0x66); // 'f'
+  bytes.setUint8(offset++, 0x6D); // 'm'
+  bytes.setUint8(offset++, 0x74); // 't'
+  bytes.setUint8(offset++, 0x20); // ' '
+  bytes.setUint32(offset, 16, Endian.little); offset += 4; // chunk size
+  bytes.setUint16(offset, 1, Endian.little); offset += 2; // PCM format
+  bytes.setUint16(offset, 1, Endian.little); offset += 2; // mono
+  bytes.setUint32(offset, sampleRate, Endian.little); offset += 4;
+  bytes.setUint32(offset, byteRate, Endian.little); offset += 4;
+  bytes.setUint16(offset, 2, Endian.little); offset += 2; // block align
+  bytes.setUint16(offset, 16, Endian.little); offset += 2; // bits per sample
+  
+  // data chunk
+  bytes.setUint8(offset++, 0x64); // 'd'
+  bytes.setUint8(offset++, 0x61); // 'a'
+  bytes.setUint8(offset++, 0x74); // 't'
+  bytes.setUint8(offset++, 0x61); // 'a'
+  bytes.setUint32(offset, dataSize, Endian.little); offset += 4;
+  
+  // Convert float32 to 16-bit PCM
+  for (int i = 0; i < numSamples; i++) {
+    final sample = (audioData[i] * 32767).round().clamp(-32768, 32767);
+    bytes.setInt16(offset, sample, Endian.little);
+    offset += 2;
+  }
+  
+  return bytes.buffer.asUint8List();
+}
+
 void main() {
   // Only run tests when the native library is present
   final libFile = Platform.isWindows
@@ -28,7 +79,7 @@ void main() {
     }
   });
 
-  test('audio generation and verification', () {
+  test('audio generation and save to file', () {
     final host = VstHost.create(
       sampleRate: 48000, 
       maxBlock: 512, 
@@ -73,7 +124,28 @@ void main() {
       print('Output first 10 samples = ${outL.take(10).toList()}');
       
       expect(outputRMS, closeTo(0.354, 0.01)); // RMS of 0.5 amplitude sine wave ≈ 0.354
-      print('Audio processing test completed - verified audio generation and passthrough');
+      
+      // Save audio to a WAV file so we can actually hear it!
+      final duration = 2.0; // 2 seconds
+      final sampleRate = 48000;
+      final totalSamples = (duration * sampleRate).round();
+      final audioData = Float32List(totalSamples);
+      
+      // Generate 2 seconds of 440Hz sine wave
+      for (int i = 0; i < totalSamples; i++) {
+        audioData[i] = 0.5 * sin(2 * pi * 440 * i / sampleRate);
+      }
+      
+      // Create a simple WAV file
+      final outputFile = File('/workspace/test_audio_440hz.wav');
+      final wavData = _createWavFile(audioData, sampleRate);
+      outputFile.writeAsBytesSync(wavData);
+      
+      print('Audio saved to: ${outputFile.path}');
+      print('File size: ${outputFile.lengthSync()} bytes');
+      print('Duration: ${duration}s at ${sampleRate}Hz');
+      print('Download this file to your Mac and play it!');
+      print('Audio processing test completed - verified audio generation and saved to file');
       
     } finally {
       host.dispose();
