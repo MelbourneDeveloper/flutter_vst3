@@ -36,42 +36,87 @@ test: build
 # Build native library (required for all Dart components)
 native: clean-native
 	@echo "Building native library..."
-	@test -n "$(VST3_SDK_DIR)" || (echo "Error: VST3_SDK_DIR environment variable not set" && echo "Please set it to the root of Steinberg VST3 SDK" && exit 1)
-	mkdir -p /workspace/native/build
-	cmake -S /workspace/native -B /workspace/native/build
-	make -C /workspace/native/build
-	@echo "Copying native library to all required locations..."
-	cp /workspace/native/build/libdart_vst_host.* /workspace/ 2>/dev/null || true
-	cp /workspace/native/build/libdart_vst_host.* /workspace/dart_vst_host/ 2>/dev/null || true
-	cp /workspace/native/build/libdart_vst_host.* /workspace/dart_vst_graph/ 2>/dev/null || true
+	@if [ -z "$(VST3_SDK_DIR)" ]; then \
+		if [ -d "vst3sdk" ]; then \
+			export VST3_SDK_DIR="$(shell pwd)/vst3sdk"; \
+			echo "Using VST3 SDK from $(shell pwd)/vst3sdk"; \
+		elif [ -d "/workspace/vst3sdk" ]; then \
+			export VST3_SDK_DIR="/workspace/vst3sdk"; \
+			echo "Using VST3 SDK from /workspace/vst3sdk"; \
+		else \
+			echo "Error: VST3_SDK_DIR environment variable not set"; \
+			echo "Please set it to the root of Steinberg VST3 SDK or run setup.sh first"; \
+			exit 1; \
+		fi; \
+	fi
+	@if [ -d "/workspace" ]; then \
+		mkdir -p /workspace/native/build; \
+		cd /workspace/native/build && VST3_SDK_DIR=$${VST3_SDK_DIR:-/workspace/vst3sdk} cmake .. && make; \
+		cp /workspace/native/build/libdart_vst_host.* /workspace/ 2>/dev/null || true; \
+		cp /workspace/native/build/libdart_vst_host.* /workspace/dart_vst_host/ 2>/dev/null || true; \
+		cp /workspace/native/build/libdart_vst_host.* /workspace/dart_vst_graph/ 2>/dev/null || true; \
+	else \
+		mkdir -p native/build; \
+		cd native/build && VST3_SDK_DIR=$${VST3_SDK_DIR:-$(shell pwd)/vst3sdk} cmake .. && make; \
+		cp native/build/libdart_vst_host.* . 2>/dev/null || true; \
+		cp native/build/libdart_vst_host.* dart_vst_host/ 2>/dev/null || true; \
+		cp native/build/libdart_vst_host.* dart_vst_graph/ 2>/dev/null || true; \
+	fi
+	@echo "Native library built and copied to required locations"
 
 # Build VST3 plugin
 plugin: native clean-plugin
 	@echo "Building VST3 plugin..."
-	@test -n "$(VST3_SDK_DIR)" || (echo "Error: VST3_SDK_DIR environment variable not set" && echo "Please set it to the root of Steinberg VST3 SDK" && exit 1)
-	mkdir -p /workspace/plugin/build
-	cmake -S /workspace/plugin -B /workspace/plugin/build
-	make -C /workspace/plugin/build
+	@if [ -z "$(VST3_SDK_DIR)" ]; then \
+		if [ -d "vst3sdk" ]; then \
+			export VST3_SDK_DIR="$(shell pwd)/vst3sdk"; \
+		elif [ -d "/workspace/vst3sdk" ]; then \
+			export VST3_SDK_DIR="/workspace/vst3sdk"; \
+		else \
+			echo "Error: VST3_SDK_DIR environment variable not set"; \
+			exit 1; \
+		fi; \
+	fi
+	@if [ -d "/workspace" ]; then \
+		mkdir -p /workspace/plugin/build; \
+		cd /workspace/plugin/build && VST3_SDK_DIR=$${VST3_SDK_DIR:-/workspace/vst3sdk} cmake .. && make; \
+	else \
+		mkdir -p plugin/build; \
+		cd plugin/build && VST3_SDK_DIR=$${VST3_SDK_DIR:-$(shell pwd)/vst3sdk} cmake .. && make; \
+	fi
 
 # Install Dart dependencies for all packages
 dart-deps:
 	@echo "Installing dart_vst3_bridge dependencies..."
-	dart pub get --directory=/workspace/dart_vst3_bridge
-	@echo "Installing dart_vst_host dependencies..."
-	dart pub get --directory=/workspace/dart_vst_host
-	@echo "Installing dart_vst_graph dependencies..."
-	dart pub get --directory=/workspace/dart_vst_graph
+	@if [ -d "/workspace" ]; then \
+		dart pub get --directory=/workspace/dart_vst3_bridge; \
+		dart pub get --directory=/workspace/dart_vst_host; \
+		dart pub get --directory=/workspace/dart_vst_graph; \
+	else \
+		dart pub get --directory=dart_vst3_bridge; \
+		dart pub get --directory=dart_vst_host; \
+		dart pub get --directory=dart_vst_graph; \
+	fi
 
 # Install reverb plugin dependencies
 reverb-deps:
 	@echo "Installing Flutter Dart Reverb dependencies..."
-	dart pub get --directory=/workspace/dart_vst3_bridge
-	dart pub get --directory=/workspace/flutter_reverb
+	@if [ -d "/workspace" ]; then \
+		dart pub get --directory=/workspace/dart_vst3_bridge; \
+		dart pub get --directory=/workspace/flutter_reverb; \
+	else \
+		dart pub get --directory=dart_vst3_bridge; \
+		dart pub get --directory=flutter_reverb; \
+	fi
 
 # Install Flutter dependencies
 flutter-deps:
 	@echo "Installing Flutter dependencies..."
-	flutter pub get --directory=/workspace/flutter_ui
+	@if [ -d "/workspace" ]; then \
+		flutter pub get --directory=/workspace/flutter_ui; \
+	else \
+		flutter pub get --directory=flutter_ui; \
+	fi
 
 # Install VST3 plugin to system location (macOS/Linux)
 install: reverb-vst
@@ -99,12 +144,20 @@ clean: clean-native clean-plugin
 # Clean native library build
 clean-native:
 	@echo "Cleaning native build..."
-	rm -rf /workspace/native/build
+	@if [ -d "/workspace" ]; then \
+		rm -rf /workspace/native/build; \
+	else \
+		rm -rf native/build; \
+	fi
 
 # Clean plugin build
 clean-plugin:
 	@echo "Cleaning plugin build..."
-	rm -rf /workspace/plugin/build
+	@if [ -d "/workspace" ]; then \
+		rm -rf /workspace/plugin/build; \
+	else \
+		rm -rf plugin/build; \
+	fi
 
 # Run Flutter app
 run-flutter: flutter-deps

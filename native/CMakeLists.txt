@@ -41,15 +41,25 @@ file(GLOB VST3_SDK_SOURCES
   ${VST3_SDK_DIR}/public.sdk/source/vst/hosting/hostclasses.cpp
   ${VST3_SDK_DIR}/public.sdk/source/vst/hosting/pluginterfacesupport.cpp
   ${VST3_SDK_DIR}/public.sdk/source/vst/hosting/module.cpp
-  ${VST3_SDK_DIR}/public.sdk/source/vst/hosting/module_linux.cpp
   ${VST3_SDK_DIR}/public.sdk/source/common/pluginview.cpp
   ${VST3_SDK_DIR}/public.sdk/source/common/commoniids.cpp
+  ${VST3_SDK_DIR}/public.sdk/source/vst/utility/stringconvert.cpp
+  ${VST3_SDK_DIR}/public.sdk/source/vst/utility/sampleaccurate.cpp
+  ${VST3_SDK_DIR}/public.sdk/source/vst/hosting/eventlist.cpp
+  ${VST3_SDK_DIR}/public.sdk/source/vst/hosting/parameterchanges.cpp
+  ${VST3_SDK_DIR}/public.sdk/source/vst/hosting/plugprovider.cpp
+  ${VST3_SDK_DIR}/public.sdk/source/common/updatehandler.cpp
+  ${VST3_SDK_DIR}/base/thread/source/flock.cpp
+  ${VST3_SDK_DIR}/base/thread/source/fcondition.cpp
+  ${VST3_SDK_DIR}/public.sdk/source/vst/hosting/connectionproxy.cpp
+  ${VST3_SDK_DIR}/public.sdk/source/common/commonstringconvert.cpp
 )
 
 include_directories(
   ${VST3_SDK_DIR}
   ${VST3_SDK_DIR}/pluginterfaces
   ${VST3_SDK_DIR}/public.sdk/source
+  ${VST3_SDK_DIR}/base/thread/include
   ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
@@ -64,6 +74,24 @@ add_library(dart_vst_host SHARED
   ${VST3_SDK_SOURCES}
 )
 
+# Add platform-specific module files
+if(APPLE)
+  target_sources(dart_vst_host PRIVATE
+    ${VST3_SDK_DIR}/public.sdk/source/vst/hosting/module_mac.mm
+    ${VST3_SDK_DIR}/public.sdk/source/common/threadchecker_mac.mm
+  )
+elseif(UNIX)
+  target_sources(dart_vst_host PRIVATE
+    ${VST3_SDK_DIR}/public.sdk/source/vst/hosting/module_linux.cpp
+    ${VST3_SDK_DIR}/public.sdk/source/common/threadchecker_linux.cpp
+  )
+elseif(WIN32)
+  target_sources(dart_vst_host PRIVATE
+    ${VST3_SDK_DIR}/public.sdk/source/vst/hosting/module_win32.cpp
+    ${VST3_SDK_DIR}/public.sdk/source/common/threadchecker_win32.cpp
+  )
+endif()
+
 target_compile_definitions(dart_vst_host PRIVATE 
   DART_VST_HOST_EXPORTS
   RELEASE=1
@@ -71,5 +99,20 @@ target_compile_definitions(dart_vst_host PRIVATE
 
 if(APPLE)
   find_library(COCOA_FRAMEWORK Cocoa)
-  target_link_libraries(dart_vst_host ${COCOA_FRAMEWORK})
+  find_library(CARBON_FRAMEWORK Carbon)
+  find_library(COREFOUNDATION_FRAMEWORK CoreFoundation)
+  find_library(AUDIOTOOLBOX_FRAMEWORK AudioToolbox)
+  target_link_libraries(dart_vst_host 
+    ${COCOA_FRAMEWORK} 
+    ${CARBON_FRAMEWORK}
+    ${COREFOUNDATION_FRAMEWORK}
+    ${AUDIOTOOLBOX_FRAMEWORK}
+  )
+  
+  # Enable Objective-C++ for .mm files with ARC
+  set_source_files_properties(
+    ${VST3_SDK_DIR}/public.sdk/source/vst/hosting/module_mac.mm
+    ${VST3_SDK_DIR}/public.sdk/source/common/threadchecker_mac.mm
+    PROPERTIES COMPILE_FLAGS "-x objective-c++ -fobjc-arc"
+  )
 endif()
