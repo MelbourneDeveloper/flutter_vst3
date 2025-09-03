@@ -2,6 +2,8 @@
 
 **Build professional VST® 3 plugins and hosts with Flutter UI and pure Dart audio processing.**
 
+<img src="VST_Compatible_Logo_Steinberg.png" alt="VST Compatible" width="120">
+
 *VST® is a trademark of Steinberg Media Technologies GmbH, registered in Europe and other countries.*
 
 This toolkit enables developers to create professional VST® 3 audio plugins with modern Flutter UIs while leveraging the power of pure Dart for real-time audio processing. Zero C++ knowledge required.

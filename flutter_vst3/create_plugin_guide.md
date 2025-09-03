@@ -1,6 +1,10 @@
-# Creating a New Dart VST3 Plugin - Step by Step Guide
+# Creating a New flutter_vst3 Plugin - Step by Step Guide
 
-This guide shows you how to create a new VST3 plugin using pure Dart - **no C++ required**.
+<img src="VST_Compatible_Logo_Steinberg.png" alt="VST Compatible" width="100">
+
+This guide shows you how to create a new VST® 3 plugin using flutter_vst3 framework with pure Dart and Flutter - **no C++ required**.
+
+*VST® is a trademark of Steinberg Media Technologies GmbH, registered in Europe and other countries.*
 
 ## Prerequisites
 
@@ -27,8 +31,8 @@ environment:
   sdk: '>=3.0.0 <4.0.0'
 
 dependencies:
-  dart_vst3_bridge:
-    path: ../../dart_vst3_bridge
+  flutter_vst3:
+    path: ../../flutter_vst3
 
 dev_dependencies:
   test: ^1.24.0
@@ -142,10 +146,10 @@ else()
   add_compile_definitions(NDEBUG RELEASE)
 endif()
 
-# Include the VST3 bridge helper
-include(../../dart_vst3_bridge/native/cmake/VST3Bridge.cmake)
+# Include the flutter_vst3 bridge helper
+include(../../flutter_vst3/native/cmake/VST3Bridge.cmake)
 
-# Create the VST3 plugin using auto-generated code from Dart definitions
+# Create the VST® 3 plugin using auto-generated code from Dart definitions
 add_dart_vst3_plugin(my_plugin my_plugin_parameters.dart)
 ```
 
@@ -239,4 +243,4 @@ dart test
 make install
 ```
 
-Your plugin is now ready to use in any VST3 host!
+Your plugin is now ready to use in any VST® 3 host!

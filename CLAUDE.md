@@ -20,11 +20,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This a VST® 3 toolkit for Dart and Flutter. Use this toolkit to implement VST® plugins and VST® hosts. This toolkit enables anyone to create VST® 3 plugins with pure Dart and Flutter.
+This a Steinberg VST® 3 toolkit for Dart and Flutter. Use this toolkit to implement VST® plugins and VST® hosts. This toolkit enables anyone to create VST® 3 plugins with pure Dart and Flutter.
 
 *VST® is a trademark of Steinberg Media Technologies GmbH.*
 
-As part of the toolkit, there is a VST3 host and audio graph system written in Dart with native C++ components. The project enables loading VST3 plugins into a customizable audio graph that can be controlled from Dart and Flutter applications.
+The main project is flutter_vst3. Use this to create your own VST® 3 plugins with Flutter and Dart. There is also VST3 host and audio graph system written in Dart with native C++ components. The project enables loading VST3 plugins into a customizable audio graph that can be controlled from Dart and Flutter applications.
 
 Download Steinberg SDK here:
 https://www.steinberg.net/vst3sdk

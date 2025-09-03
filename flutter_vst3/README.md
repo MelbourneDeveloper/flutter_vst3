@@ -2,6 +2,9 @@
 
 Flutter/Dart framework for building VST® 3 plugins with Flutter UI and pure Dart audio processing.
 
+<img src="VST_Compatible_Logo_Steinberg.png" alt="VST Compatible" width="100">
+
+
 *VST® is a trademark of Steinberg Media Technologies GmbH, registered in Europe and other countries.*
 
 ## Overview
@@ -19,126 +22,15 @@ Flutter/Dart framework for building VST® 3 plugins with Flutter UI and pure Dar
 - ✅ **3-Way Parameter Binding** - DAW ↔ Flutter UI ↔ Parameters stay in sync
 - ✅ **Cross-Platform** - macOS, Windows, Linux support
 
-## Installation
-
-```yaml
-dependencies:
-  flutter_vst3:
-    git:
-      url: https://github.com/your-org/flutter_vst3_toolkit
-      path: flutter_vst3
-```
-
 ## Quick Start
 
-### 1. Define Your Parameters
+📖 **[Complete Step-by-Step Plugin Creation Guide](create_plugin_guide.md)**
 
-```dart
-class MyParameters {
-  /// Controls the output volume (0% = silence, 100% = full volume)
-  double gain = 0.5;
-  
-  /// Adds warmth to the signal (0% = clean, 100% = saturated)  
-  double warmth = 0.0;
-  
-  void setParameter(int paramId, double value) {
-    switch (paramId) {
-      case 0: gain = value; break;
-      case 1: warmth = value; break;
-    }
-  }
-}
-```
-
-### 2. Create Your Processor
-
-```dart
-import 'package:flutter_vst3/flutter_vst3.dart';
-
-class MyProcessor extends VST3Processor {
-  final parameters = MyParameters();
-  
-  @override
-  void processStereo(List<double> inputL, List<double> inputR,
-                    List<double> outputL, List<double> outputR) {
-    for (int i = 0; i < inputL.length; i++) {
-      outputL[i] = inputL[i] * parameters.gain;
-      outputR[i] = inputR[i] * parameters.gain;
-    }
-  }
-  
-  @override
-  void setParameter(int paramId, double value) {
-    parameters.setParameter(paramId, value);
-  }
-}
-```
-
-### 3. Build Flutter UI with Parameter Binding
-
-```dart
-import 'package:flutter/material.dart';
-import 'package:flutter_vst3/flutter_vst3.dart';
-
-class MyPluginUI extends StatefulWidget {
-  @override
-  _MyPluginUIState createState() => _MyPluginUIState();
-}
-
-class _MyPluginUIState extends State<MyPluginUI> {
-  final parameters = MyParameters();
-  
-  @override
-  void initState() {
-    super.initState();
-    // Register for DAW parameter changes
-    VST3Bridge.registerParameterChangeCallback(_onParameterChanged);
-  }
-  
-  void _onParameterChanged(int paramId, double value) {
-    if (mounted) {
-      setState(() => parameters.setParameter(paramId, value));
-    }
-  }
-  
-  void _updateParameter(int paramId, double value) {
-    setState(() => parameters.setParameter(paramId, value));
-    // Send to VST host/DAW
-    VST3Bridge.sendParameterToHost(paramId, value);
-  }
-  
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      home: Scaffold(
-        body: Column(
-          children: [
-            Slider(
-              value: parameters.gain,
-              onChanged: (v) => _updateParameter(0, v),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-```
-
-### 4. Build VST® 3 Plugin
-
-```cmake
-# CMakeLists.txt
-cmake_minimum_required(VERSION 3.20)
-include(../../flutter_vst3/native/cmake/VST3Bridge.cmake)
-add_dart_vst3_plugin(my_plugin my_parameters.dart)
-```
-
-```bash
-mkdir build && cd build
-cmake .. && make
-# Output: my_plugin.vst3
-```
+The guide covers everything you need to build your first VST® 3 plugin:
+- Project setup and dependencies
+- Parameter definition with auto-generated C++
+- Building and testing your plugin
+- Installation to system VST® 3 directory
 
 ## API Reference
 
