@@ -59,11 +59,11 @@ class VST3Bridge {
   // Register your processor
   static void registerProcessor(VST3Processor processor);
   
-  // Parameter change notifications from DAW
-  static void registerParameterChangeCallback(ParameterChangeCallback callback);
+  // Initialize processor (called from C++ layer)
+  static void initializeProcessor(double sampleRate, int maxBlockSize);
   
-  // Send parameter changes to DAW
-  static void sendParameterToHost(int paramId, double value);
+  // Process audio (called from C++ layer)
+  static void processStereoCallback(/* FFI parameters */);
 }
 ```
 

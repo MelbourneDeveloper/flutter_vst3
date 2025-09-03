@@ -1,3 +1,11 @@
+## 0.1.2
+
+* Corrections
+
+## 0.1.1
+
+* Fix image URL
+
 ## 0.1.0
 
 * Initial release of flutter_vst3 framework

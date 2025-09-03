@@ -36,12 +36,8 @@ graph TB
         end
         
         subgraph "Native Bridge"
-            NL[native/<br/>C++ VST® 3 Implementation]
+            NL[C++ VST® 3 Implementation<br/>Built via CMake]
             PL[VST® 3 Plugin Wrapper<br/>+ IPC to Dart Executable]
-        end
-        
-        subgraph "UI Layer"
-            FUI[flutter_ui<br/>Desktop Host App]
         end
     end
     
@@ -62,9 +58,6 @@ graph TB
     DVH --> DVG
     DVG --> NL
     
-    %% UI Integration
-    FUI --> DVH
-    FUI --> DVG
     
     %% DAW Integration
     NL --> DAW1
@@ -132,9 +125,8 @@ sequenceDiagram
 
 ### 🔧 Native Infrastructure
 
-- **`native/`** - C++ implementation using Steinberg VST® 3 SDK
-- **`plugin/`** - VST® 3 plugin wrapper that hosts the Dart audio graph
-- **`flutter_ui/`** - Desktop Flutter application for interactive testing
+- **VST® 3 native components** - C++ implementation using Steinberg VST® 3 SDK (built via CMake)
+- **Plugin wrappers** - VST® 3 plugin wrappers that host Dart audio processing
 
 ## Key Features
 
@@ -315,14 +307,14 @@ flutter_vst3_toolkit/
 │   │       ├── flutter_vst3_bridge.dart    # DAW ↔ Flutter binding
 │   │       ├── flutter_vst3_callbacks.dart # FFI callbacks
 │   │       └── flutter_vst3_parameters.dart # Parameter management
-│   └── native/             # C++ templates and CMake helpers
+│   ├── native/             # C++ templates and CMake helpers
+│   └── scripts/            # Plugin generation scripts
 ├── vsts/
 │   ├── flutter_reverb/     # Example reverb with Flutter UI
 │   └── echo/              # Example echo with Flutter UI
 ├── dart_vst_host/         # VST® 3 hosting API for Dart
 ├── dart_vst_graph/        # Audio graph system
-├── native/                # C++ VST® 3 SDK integration
-├── flutter_ui/            # Desktop host application
+├── vst3sdk/               # Steinberg VST® 3 SDK
 └── Makefile              # Build automation
 ```
 
@@ -345,13 +337,11 @@ The framework provides automatic 3-way parameter binding:
 
 ### Flutter Reverb Plugin
 - Full reverb algorithm in pure Dart
-- Beautiful Flutter UI with animated controls
 - Real-time parameter updates
 - Ships as standard .vst3 bundle
 
 ### Echo Plugin
 - Delay/echo effect with feedback
-- Flutter UI with custom knob widgets
 - Bypass control
 - Parameter automation support
 
@@ -367,8 +357,8 @@ cd vsts/echo && dart test
 cd dart_vst_host && dart test
 cd dart_vst_graph && dart test
 
-# Interactive testing with GUI
-cd flutter_ui && flutter run
+# Interactive testing with example plugins
+cd vsts/flutter_reverb && flutter run
 ```
 
 ## Contributing
