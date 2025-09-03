@@ -1,167 +1,175 @@
 # dart_vst3_bridge
 
-A Dart package that enables **pure Dart VST3 plugin development with Flutter UIs**. This bridge automatically generates all VST3 C++ boilerplate from JSON metadata, requiring zero C++ knowledge.
+Build VST3 plugins with **pure Dart** and **Flutter UIs**. Zero C++ knowledge required.
 
-## VST3 Plugin Architecture with Native Dart Executable
+## What This Package Does
 
-The toolkit uses a unique architecture where Dart code is compiled to **native machine code executables** that communicate with the VST3 wrapper via IPC (Inter-Process Communication). This provides true native performance without requiring the Dart runtime in the DAW.
+dart_vst3_bridge is a toolkit that:
+- **Auto-generates** all VST3 C++ boilerplate from JSON metadata
+- **Compiles** Dart DSP code to native executables for real-time performance  
+- **Enables** Flutter UIs for rich, modern plugin interfaces
+- **Handles** all VST3 SDK complexity automatically
 
-```mermaid
-flowchart TB
-    subgraph Plugin Development
-        JSON[plugin_metadata.json<br/>Parameter definitions]
-        DartCode[Dart processor code<br/>DSP logic]
-        Flutter[Flutter UI<br/>Plugin interface]
-    end
-    
-    subgraph Build Process
-        DartCompiler[dart compile exe<br/>Native compilation]
-        Generator[generate_plugin.dart<br/>Code generator]
-        Templates[C++ Templates<br/>VST3 boilerplate]
-        CMake[CMakeLists.txt<br/>Build configuration]
-    end
-    
-    subgraph Generated Output
-        NativeExe[my_plugin_processor<br/>Native executable]
-        Controller[*_controller.cpp<br/>Parameter handling]
-        Processor[*_processor.cpp<br/>Audio processing + IPC]
-        Factory[*_factory.cpp<br/>Plugin registration]
-        Bundle[plugin.vst3<br/>Complete VST3 bundle]
-    end
-    
-    JSON --> Generator
-    DartCode --> DartCompiler
-    DartCompiler --> NativeExe
-    Generator --> Templates
-    Templates --> Controller
-    Templates --> Processor
-    Templates --> Factory
-    Flutter -.-> Bundle
-    NativeExe --> Bundle
-    Controller --> Bundle
-    Processor --> Bundle
-    Factory --> Bundle
-    CMake --> Bundle
-```
-
-## Native Executable Implementation
+## Architecture
 
 ```mermaid
 flowchart LR
-    subgraph Host DAW
-        DAW[VST3 Host<br/>Cubase, Logic, etc.]
-    end
-    
-    subgraph VST3 Plugin Bundle
-        CppWrapper[C++ VST3 Wrapper<br/>Generated boilerplate]
-        NativeDart[Native Dart Executable<br/>Compiled machine code]
-    end
-    
-    subgraph Optional UI
-        FlutterUI[Flutter UI Process<br/>Plugin interface]
-    end
-    
-    DAW <-->|VST3 API| CppWrapper
-    CppWrapper <-->|IPC| NativeDart
-    NativeDart <-.->|IPC| FlutterUI
+    DAW[DAW/Host] <-->|VST3 API| CPP[C++ Wrapper<br/>Auto-generated]
+    CPP <-->|IPC<br/>Binary Protocol| DART[Dart Executable<br/>Native Machine Code]
+    DART <-.->|Optional| UI[Flutter UI]
 ```
 
-## Core Concept
-
-**Write Dart, get VST3.** Define your plugin parameters in JSON, implement audio processing in Dart, design your UI in Flutter, and the bridge generates all VST3 C++ code automatically. Your Dart code is compiled to native machine code for optimal performance.
-
-## How It Works
-
-1. **Define plugin metadata** in `plugin_metadata.json`:
-   ```json
-   {
-     "pluginName": "Flutter Reverb",
-     "vendor": "Your Company", 
-     "parameters": [
-       {
-         "id": 1000,
-         "name": "room_size",
-         "defaultValue": 0.5,
-         "units": "%"
-       }
-     ]
-   }
-   ```
-
-2. **Implement audio processing** in Dart:
-   ```dart
-   void process(Float32List input, Float32List output) {
-     // Pure Dart DSP processing - compiled to native code
-   }
-   ```
-
-3. **Build with CMake** (automatically compiles Dart to native):
-   ```cmake
-   add_dart_vst3_plugin(my_plugin plugin_metadata.json)
-   ```
-
-4. **Result**: Complete VST3 plugin with native Dart executable, C++ wrapper, and optional Flutter UI.
-
-## Features
-
-- **🚀 Zero C++ Required**: Write only Dart and JSON
-- **🎨 Flutter UIs**: Rich, modern plugin interfaces  
-- **⚡ Code Generation**: Automatic VST3 C++ from metadata
-- **📦 Complete VST3**: Proper SDK compliance and bundling
-- **🔧 Cross-Platform**: macOS, Windows, Linux support
-- **🛡️ Type Safe**: Generated C++ matches Dart exactly
+The bridge compiles your Dart code to a **native executable** (not AOT, not JIT - pure machine code) that runs as a separate process and communicates with the VST3 wrapper via high-performance IPC.
 
 ## Quick Start
 
-1. **Create plugin directory**:
-   ```bash
-   mkdir my_plugin && cd my_plugin
-   ```
+### 1. Create Your Plugin Structure
 
-2. **Add metadata** (`plugin_metadata.json`):
-   ```json
-   {
-     "pluginName": "My Plugin",
-     "vendor": "Your Company",
-     "version": "1.0.0",
-     "category": "Effect",
-     "bundleIdentifier": "com.yourcompany.myplugin",
-     "companyWeb": "https://yourcompany.com",
-     "companyEmail": "info@yourcompany.com",
-     "parameters": []
-   }
-   ```
-
-3. **Add CMake** (`CMakeLists.txt`):
-   ```cmake
-   cmake_minimum_required(VERSION 3.20)
-   project(my_plugin)
-   
-   include(../../dart_vst3_bridge/native/cmake/VST3Bridge.cmake)
-   add_dart_vst3_plugin(my_plugin plugin_metadata.json)
-   ```
-
-4. **Build**:
-   ```bash
-   mkdir build && cd build && cmake .. && make
-   ```
-
-## Project Structure
-
-```
-my_plugin/
-├── plugin_metadata.json         ← Plugin definition
+```bash
+my_echo/
+├── plugin_metadata.json      # Plugin definition
 ├── lib/
-│   ├── src/
-│   │   └── my_plugin_processor.dart  ← Dart DSP logic
-│   └── my_plugin.dart
-├── CMakeLists.txt               ← Build configuration
-└── build/
-    ├── generated/               ← Auto-generated C++
-    │   ├── my_plugin_controller.cpp
-    │   ├── my_plugin_processor.cpp
-    │   └── my_plugin_factory.cpp
-    └── VST3/Release/my_plugin.vst3  ← Final VST3 bundle
+│   ├── my_echo_processor_exe.dart  # Main executable entry
+│   └── src/
+│       ├── echo_processor.dart     # DSP implementation  
+│       └── echo_parameters.dart    # Parameter handling
+└── CMakeLists.txt
 ```
 
-This package is part of the broader VST3 toolkit that also includes `dart_vst_host` (for loading VST3s) and `dart_vst_graph` (for audio routing).
+### 2. Define Metadata (`plugin_metadata.json`)
+
+```json
+{
+  "pluginName": "My Echo",
+  "vendor": "Your Company",
+  "version": "1.0.0",
+  "category": "Fx|Delay",
+  "bundleIdentifier": "com.yourcompany.echo",
+  "companyWeb": "https://yoursite.com",
+  "companyEmail": "info@yoursite.com",
+  "parameters": [
+    {
+      "id": 0,
+      "name": "delayTime",
+      "displayName": "Delay Time",
+      "defaultValue": 0.5,
+      "units": "ms"
+    }
+  ]
+}
+```
+
+### 3. Implement DSP in Pure Dart
+
+```dart
+// echo_processor.dart
+class EchoProcessor {
+  void processStereo(List<double> inputL, List<double> inputR,
+                     List<double> outputL, List<double> outputR,
+                     EchoParameters params) {
+    // Your DSP code here - pure Dart!
+    for (int i = 0; i < inputL.length; i++) {
+      outputL[i] = inputL[i] + delayBuffer[i] * params.feedback;
+      outputR[i] = inputR[i] + delayBuffer[i] * params.feedback;
+    }
+  }
+}
+```
+
+### 4. Create Executable Entry Point
+
+```dart
+// my_echo_processor_exe.dart
+import 'dart:io';
+import 'dart:typed_data';
+import 'src/echo_processor.dart';
+
+void main() async {
+  final processor = EchoProcessor();
+  
+  await for (final bytes in stdin) {
+    // Handle IPC commands: INIT, PROCESS, SET_PARAM
+    // Process audio with your Dart DSP code
+    // Send results back via stdout
+  }
+}
+```
+
+### 5. Build with CMake
+
+```cmake
+# CMakeLists.txt
+cmake_minimum_required(VERSION 3.20)
+project(my_echo)
+
+include(../../dart_vst3_bridge/native/cmake/VST3Bridge.cmake)
+add_dart_vst3_plugin(my_echo plugin_metadata.json)
+```
+
+```bash
+mkdir build && cd build
+cmake .. && make
+# Output: my_echo.vst3
+```
+
+## How It Works
+
+1. **JSON → C++**: The `generate_plugin.dart` script reads your metadata and generates all VST3 C++ code
+2. **Dart → Native**: CMake compiles your Dart processor to a native executable via `dart compile exe`
+3. **Bundle Creation**: Everything is packaged into a standard VST3 bundle
+4. **Runtime**: The C++ wrapper spawns your Dart executable and communicates via binary IPC protocol
+
+## Features
+
+✅ **Pure Dart DSP** - Write audio processing in familiar Dart syntax  
+✅ **Native Performance** - Compiled to machine code, no runtime overhead  
+✅ **Flutter UIs** - Create beautiful, reactive plugin interfaces  
+✅ **Auto-Generated C++** - Never touch C++ code  
+✅ **Cross-Platform** - macOS, Windows, Linux support  
+✅ **VST3 Compliant** - Full SDK compatibility  
+
+## IPC Protocol
+
+The C++ wrapper and Dart executable communicate using a simple binary protocol:
+
+| Command | ID | Data |
+|---------|-----|------|
+| INIT | 0x01 | Sample rate (float64) |
+| PROCESS | 0x02 | Sample count + audio data |
+| SET_PARAM | 0x03 | Param ID + value |
+| TERMINATE | 0xFF | None |
+
+## Project Structure After Build
+
+```
+my_echo/
+├── build/
+│   ├── generated/
+│   │   ├── my_echo_controller.cpp    # Auto-generated
+│   │   ├── my_echo_processor.cpp     # Auto-generated
+│   │   └── my_echo_factory.cpp       # Auto-generated
+│   ├── my_echo_processor              # Compiled Dart executable
+│   └── VST3/
+│       └── my_echo.vst3/             # Final plugin bundle
+│           └── Contents/
+│               ├── MacOS/
+│               │   ├── my_echo        # VST3 dylib
+│               │   └── my_echo_processor  # Dart exe
+│               └── Info.plist
+```
+
+## Requirements
+
+- Dart SDK 3.0+
+- CMake 3.20+
+- VST3 SDK (auto-downloaded by setup.sh)
+- C++17 compiler
+
+## Related Packages
+
+- `dart_vst_host` - Load and control VST3 plugins from Dart
+- `dart_vst_graph` - Audio routing and mixing for VST plugins
+
+## License
+
+See LICENSE file in the repository root.
