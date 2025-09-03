@@ -35,10 +35,14 @@ typedef DartGetParameterCountNative = ffi.Int32 Function();
 typedef DartResetNative = ffi.Void Function();
 typedef DartDisposeNative = ffi.Void Function();
 
+/// Callback for parameter changes from DAW/host
+typedef ParameterChangeCallback = void Function(int paramId, double value);
+
 /// Main FFI bridge between Dart VST3 plugins and C++ VST3 infrastructure
 class VST3Bridge {
   static final _dylib = _loadLibrary();
   static VST3Processor? _processor;
+  static ParameterChangeCallback? _parameterChangeCallback;
   
   
   static ffi.DynamicLibrary _loadLibrary() {
@@ -58,6 +62,17 @@ class VST3Bridge {
   static void registerProcessor(VST3Processor processor) {
     _processor = processor;
     print('Dart VST3 processor registered locally (callbacks not yet implemented in FFI layer)');
+  }
+
+  /// Register callback for parameter changes from DAW/host
+  static void registerParameterChangeCallback(ParameterChangeCallback callback) {
+    _parameterChangeCallback = callback;
+  }
+
+  /// Send parameter change to VST host/DAW
+  /// Called from Flutter UI when user changes parameters
+  static void sendParameterToHost(int paramId, double normalizedValue) {
+    _processor?.setParameter(paramId, normalizedValue);
   }
 
   /// Initialize the processor
@@ -106,6 +121,7 @@ class VST3Bridge {
   /// Called from C++ when VST3 parameter changes
   static void setParameter(int paramId, double normalizedValue) {
     _processor?.setParameter(paramId, normalizedValue);
+    _parameterChangeCallback?.call(paramId, normalizedValue);
   }
 
   /// Get parameter value

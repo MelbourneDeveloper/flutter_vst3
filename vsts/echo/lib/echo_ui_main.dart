@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'dart:math';
+import 'package:dart_vst3_bridge/dart_vst3_bridge.dart';
 import 'echo_parameters.dart';
+import 'src/echo_bridge.dart';
 
 /// Main entry point for Echo VST3 Flutter UI
 /// This runs as a native Flutter app that directly controls VST parameters
 void main() {
+  // Initialize the Echo VST3 bridge
+  EchoBridge.initialize();
   runApp(const EchoVSTApp());
 }
 
@@ -42,6 +46,17 @@ class _EchoControlPanelState extends State<EchoControlPanel>
       vsync: this,
       duration: const Duration(milliseconds: 1500),
     )..repeat();
+    
+    // Register for parameter change notifications from DAW/host
+    VST3Bridge.registerParameterChangeCallback(_onParameterChanged);
+  }
+  
+  void _onParameterChanged(int paramId, double value) {
+    if (mounted) {
+      setState(() {
+        _parameters.setParameter(paramId, value);
+      });
+    }
   }
   
   @override
@@ -53,9 +68,9 @@ class _EchoControlPanelState extends State<EchoControlPanel>
   void _updateParameter(int paramId, double value) {
     setState(() {
       _parameters.setParameter(paramId, value);
-      // Direct FFI callback to VST host would go here
-      // For now, just update local state
     });
+    // Send parameter change to VST host/DAW
+    VST3Bridge.sendParameterToHost(paramId, value);
   }
 
   Widget _buildRotaryKnob({
