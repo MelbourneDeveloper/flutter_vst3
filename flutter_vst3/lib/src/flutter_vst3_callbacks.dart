@@ -1,7 +1,7 @@
 import 'dart:ffi' as ffi;
 import 'dart:io';
 import 'package:ffi/ffi.dart';
-import 'vst3_bridge.dart';
+import 'flutter_vst3_bridge.dart';
 
 /// C function type definitions for FFI callbacks
 typedef InitializeProcessorC = ffi.Void Function(ffi.Double sampleRate, ffi.Int32 maxBlockSize);

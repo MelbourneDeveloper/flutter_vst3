@@ -1,25 +1,27 @@
-# dart_vst3_bridge
+# flutter_vst3
 
-Build VST3 plugins with **pure Dart** and **Flutter UIs**. Zero C++ knowledge required.
+Build VST® 3 plugins with **Flutter UI** and **pure Dart audio processing**. Zero C++ knowledge required.
+
+*VST® is a trademark of Steinberg Media Technologies GmbH, registered in Europe and other countries.*
 
 ## What This Package Does
 
-dart_vst3_bridge is a toolkit that:
-- **Auto-generates** all VST3 C++ boilerplate from JSON metadata
+flutter_vst3 is a complete framework that:
+- **Auto-generates** all VST® 3 C++ boilerplate from Dart metadata
 - **Compiles** Dart DSP code to native executables for real-time performance  
 - **Enables** Flutter UIs for rich, modern plugin interfaces
-- **Handles** all VST3 SDK complexity automatically
+- **Handles** all VST® 3 SDK complexity automatically
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    DAW[DAW/Host] <-->|VST3 API| CPP[C++ Wrapper<br/>Auto-generated]
+    DAW[DAW/Host] <-->|VST® 3 API| CPP[C++ Wrapper<br/>Auto-generated]
     CPP <-->|IPC<br/>Binary Protocol| DART[Dart Executable<br/>Native Machine Code]
     DART <-.->|Optional| UI[Flutter UI]
 ```
 
-The bridge compiles your Dart code to a **native executable** (not AOT, not JIT - pure machine code) that runs as a separate process and communicates with the VST3 wrapper via high-performance IPC.
+The framework compiles your Dart code to a **native executable** (not AOT, not JIT - pure machine code) that runs as a separate process and communicates with the VST® 3 wrapper via high-performance IPC.
 
 ## Quick Start
 
@@ -102,7 +104,7 @@ void main() async {
 cmake_minimum_required(VERSION 3.20)
 project(my_echo)
 
-include(../../dart_vst3_bridge/native/cmake/VST3Bridge.cmake)
+include(../../flutter_vst3/native/cmake/VST3Bridge.cmake)
 add_dart_vst3_plugin(my_echo plugin_metadata.json)
 ```
 
@@ -114,9 +116,9 @@ cmake .. && make
 
 ## How It Works
 
-1. **JSON → C++**: The `generate_plugin.dart` script reads your metadata and generates all VST3 C++ code
+1. **JSON → C++**: The `generate_plugin.dart` script reads your metadata and generates all VST® 3 C++ code
 2. **Dart → Native**: CMake compiles your Dart processor to a native executable via `dart compile exe`
-3. **Bundle Creation**: Everything is packaged into a standard VST3 bundle
+3. **Bundle Creation**: Everything is packaged into a standard VST® 3 bundle
 4. **Runtime**: The C++ wrapper spawns your Dart executable and communicates via binary IPC protocol
 
 ## Features
@@ -126,7 +128,7 @@ cmake .. && make
 ✅ **Flutter UIs** - Create beautiful, reactive plugin interfaces  
 ✅ **Auto-Generated C++** - Never touch C++ code  
 ✅ **Cross-Platform** - macOS, Windows, Linux support  
-✅ **VST3 Compliant** - Full SDK compatibility  
+✅ **VST® 3 Compliant** - Full compatibility with Steinberg VST® 3 SDK  
 
 ## IPC Protocol
 
@@ -153,7 +155,7 @@ my_echo/
 │       └── my_echo.vst3/             # Final plugin bundle
 │           └── Contents/
 │               ├── MacOS/
-│               │   ├── my_echo        # VST3 dylib
+│               │   ├── my_echo        # VST® 3 dylib
 │               │   └── my_echo_processor  # Dart exe
 │               └── Info.plist
 ```
@@ -161,14 +163,27 @@ my_echo/
 ## Requirements
 
 - Dart SDK 3.0+
+- Flutter SDK 3.0+ (for UI components)
 - CMake 3.20+
-- VST3 SDK (auto-downloaded by setup.sh)
+- Steinberg VST® 3 SDK (auto-downloaded by setup.sh)
 - C++17 compiler
 
 ## Related Packages
 
-- `dart_vst_host` - Load and control VST3 plugins from Dart
-- `dart_vst_graph` - Audio routing and mixing for VST plugins
+- `dart_vst_host` - Load and control VST® 3 plugins from Dart
+- `dart_vst_graph` - Audio routing and mixing for VST® plugins
+
+## Legal Notice
+
+This project is not affiliated with, endorsed by, or sponsored by Steinberg Media Technologies GmbH. 
+VST® is a trademark of Steinberg Media Technologies GmbH, registered in Europe and other countries.
+
+The flutter_vst3 framework is an independent implementation that interfaces with the Steinberg VST® 3 SDK
+under the terms of the VST® 3 SDK License Agreement. Users of this framework must comply with the 
+Steinberg VST® 3 SDK License Agreement when distributing VST® 3 plugins.
+
+For more information about VST® 3 licensing, visit:
+https://steinbergmedia.github.io/vst3_dev_portal/pages/VST+3+Licensing/Index.html
 
 ## License
 
