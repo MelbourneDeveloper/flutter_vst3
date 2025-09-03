@@ -76,9 +76,15 @@ void generatePluginFiles(String pluginDir, String pluginName, String targetName,
   // Add generated C++ code
   replacements.addAll(cppSnippets);
   
-  // Generate files from templates - using AOT template
+  // Generate files from templates - choose controller based on UI type
+  final hasFlutterUI = metadata['hasFlutterUI'] == true;
+  final controllerTemplate = hasFlutterUI 
+    ? 'flutter_controller.cpp.template'
+    : 'plugin_controller.cpp.template';
+  final controllerExtension = hasFlutterUI ? 'mm' : 'cpp';
+    
   final templates = [
-    ('plugin_controller.cpp.template', '${targetName}_controller.cpp'),
+    (controllerTemplate, '${targetName}_controller.$controllerExtension'),
     ('plugin_processor_aot.cpp.template', '${targetName}_processor.cpp'),
     ('plugin_factory.cpp.template', '${targetName}_factory.cpp'),
     ('plugin_processor_native.cpp.template', '${targetName}_processor_native.cpp')
@@ -206,6 +212,9 @@ static const FUID k${pluginClass}ControllerUID(0xA0115732, 0x16F06596, 0x4B9846B
 }
 
 void _generateCMakeMetadata(Directory genDir, Map<String, dynamic> metadata, List<Map<String, dynamic>> parameters) {
+  final hasFlutterUI = metadata['hasFlutterUI'] == true;
+  final controllerExt = hasFlutterUI ? 'mm' : 'cpp';
+  
   final content = '''set(JSON_PLUGIN_NAME "${metadata['pluginName']}")
 set(JSON_VENDOR "${metadata['vendor']}")
 set(JSON_VERSION "${metadata['version']}")
@@ -214,6 +223,8 @@ set(JSON_BUNDLE_ID "${metadata['bundleIdentifier']}")
 set(JSON_WEB "${metadata['companyWeb']}")
 set(JSON_EMAIL "${metadata['companyEmail']}")
 set(PARAM_COUNT "${parameters.length}")
+set(HAS_FLUTTER_UI "${hasFlutterUI ? 'TRUE' : 'FALSE'}")
+set(CONTROLLER_EXTENSION "${controllerExt}")
 ''';
   
   File('${genDir.path}/metadata.cmake').writeAsStringSync(content);

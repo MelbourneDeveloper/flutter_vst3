@@ -152,8 +152,15 @@ function(add_dart_vst3_plugin target_name dart_file)
     endif()
     
     # Use generated sources instead of user-written sources
+    # Check if we have Flutter UI to determine controller extension
+    if(DEFINED CONTROLLER_EXTENSION)
+        set(controller_file ${CMAKE_CURRENT_BINARY_DIR}/generated/${target_name}_controller.${CONTROLLER_EXTENSION})
+    else()
+        set(controller_file ${CMAKE_CURRENT_BINARY_DIR}/generated/${target_name}_controller.cpp)
+    endif()
+    
     set(generated_sources
-        ${CMAKE_CURRENT_BINARY_DIR}/generated/${target_name}_controller.cpp
+        ${controller_file}
         ${CMAKE_CURRENT_BINARY_DIR}/generated/${target_name}_processor.cpp
         ${CMAKE_CURRENT_BINARY_DIR}/generated/${target_name}_factory.cpp
     )
@@ -234,6 +241,15 @@ function(add_dart_vst3_plugin target_name dart_file)
             sdk
             ${PLUGIN_LINK_LIBRARIES}
     )
+    
+    # Add macOS frameworks for Flutter UI support
+    if(SMTG_MAC AND DEFINED HAS_FLUTTER_UI AND HAS_FLUTTER_UI)
+        target_link_libraries(${target_name}
+            PRIVATE
+                "-framework Foundation"
+                "-framework AppKit"
+        )
+    endif()
 
     # Set bundle properties on macOS
     if(SMTG_MAC)

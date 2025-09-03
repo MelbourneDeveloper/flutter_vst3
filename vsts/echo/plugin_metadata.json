@@ -6,6 +6,7 @@
   "bundleIdentifier": "com.cf.echo",
   "companyWeb": "https://cf.com",
   "companyEmail": "info@cf.com",
+  "hasFlutterUI": true,
   "parameters": [
     {
       "id": 0,

@@ -1,0 +1,316 @@
+// Copyright (c) 2025
+// Auto-generated VST3 controller with Flutter UI for {{PLUGIN_NAME}}
+// This file is generated automatically by dart_vst3_bridge at build time.
+// DO NOT EDIT - any changes will be overwritten.
+
+#include "{{PLUGIN_ID}}_ids.h"
+#include "pluginterfaces/base/ibstream.h"
+#include "pluginterfaces/base/ustring.h"
+#include "pluginterfaces/vst/ivstmidicontrollers.h"
+#include "public.sdk/source/vst/vsteditcontroller.h"
+#include "public.sdk/source/common/pluginview.h"
+#include <atomic>
+#include <thread>
+
+#ifdef __APPLE__
+#include <AppKit/AppKit.h>
+#include <objc/runtime.h>
+#endif
+
+using namespace Steinberg;
+using namespace Steinberg::Vst;
+
+// Forward declaration
+IPlugView* createFlutterView(EditController* controller);
+
+// Controller for the {{PLUGIN_NAME}} plugin with Flutter UI
+class {{PLUGIN_CLASS_NAME}}Controller : public EditController {
+public:
+    {{PLUGIN_CLASS_NAME}}Controller() = default;
+    
+    tresult PLUGIN_API initialize(FUnknown* context) override {
+        tresult result = EditController::initialize(context);
+        if (result != kResultTrue) return result;
+
+        // Add parameters to controller
+{{PARAMETER_CONTROLLER_INIT}}
+
+        return kResultTrue;
+    }
+
+    tresult PLUGIN_API setComponentState(IBStream* state) override {
+        if (!state) return kResultFalse;
+
+        // Read parameter values from processor state
+        for (int32 i = 0; i < {{PARAMETER_COUNT}}; ++i) {
+            double value = 0.0;
+            int32 bytesRead = 0;
+            if (state->read(&value, sizeof(value), &bytesRead) == kResultTrue) {
+                setParamNormalized(i, value);
+                // Notify Flutter UI of parameter change
+                if (flutterView_) {
+                    updateFlutterParameter(i, value);
+                }
+            }
+        }
+
+        return kResultTrue;
+    }
+
+    tresult PLUGIN_API setState(IBStream* state) override {
+        return setComponentState(state);
+    }
+
+    tresult PLUGIN_API getState(IBStream* state) override {
+        if (!state) return kResultFalse;
+
+        // Write current parameter values
+        for (int32 i = 0; i < {{PARAMETER_COUNT}}; ++i) {
+            double value = getParamNormalized(i);
+            int32 bytesWritten = 0;
+            state->write(&value, sizeof(value), &bytesWritten);
+        }
+
+        return kResultTrue;
+    }
+
+    // Override parameter change to sync with Flutter
+    tresult PLUGIN_API setParamNormalized(ParamID tag, ParamValue value) override {
+        tresult result = EditController::setParamNormalized(tag, value);
+        if (result == kResultTrue && flutterView_) {
+            updateFlutterParameter(tag, value);
+        }
+        return result;
+    }
+
+    // Convert normalized parameter values to display strings
+    tresult PLUGIN_API getParamStringByValue(ParamID id, ParamValue valueNormalized, String128 string) override {
+{{PARAMETER_TO_STRING}}
+        return EditController::getParamStringByValue(id, valueNormalized, string);
+    }
+
+    // Convert display strings to normalized parameter values  
+    tresult PLUGIN_API getParamValueByString(ParamID id, TChar* string, ParamValue& valueNormalized) override {
+{{STRING_TO_PARAMETER}}
+        return EditController::getParamValueByString(id, string, valueNormalized);
+    }
+
+    // Create Flutter-based UI view
+    IPlugView* PLUGIN_API createView(FIDString name) override {
+        if (strcmp(name, ViewType::kEditor) == 0) {
+            flutterView_ = createFlutterView(this);
+            return flutterView_;
+        }
+        return nullptr;
+    }
+
+private:
+    IPlugView* flutterView_ = nullptr;
+    
+    void updateFlutterParameter(ParamID paramId, ParamValue value) {
+        // Send parameter update to Flutter UI
+        // This will be handled by the Flutter view implementation
+    }
+};
+
+// Simple Flutter view that creates embedded native UI controls
+class {{PLUGIN_CLASS_NAME}}FlutterView : public CPluginView {
+public:
+    {{PLUGIN_CLASS_NAME}}FlutterView(EditController* controller) : CPluginView(nullptr), controller_(controller) {}
+    
+    ~{{PLUGIN_CLASS_NAME}}FlutterView() override {
+        closeFlutterApp();
+    }
+
+    tresult PLUGIN_API attached(void* parent, FIDString type) override {
+#ifdef __APPLE__
+        if (strcmp(type, kPlatformTypeNSView) != 0) {
+            return kResultFalse;
+        }
+        
+        parentView_ = (NSView*)parent;
+        
+        // Create embedded native UI directly in the parent view
+        createEmbeddedFlutterUI();
+        return kResultTrue;
+#else
+        return kResultFalse;
+#endif
+    }
+    
+    tresult PLUGIN_API removed() override {
+        closeFlutterApp();
+        return kResultTrue;
+    }
+    
+    tresult PLUGIN_API getSize(ViewRect* size) override {
+        if (!size) return kInvalidArgument;
+        size->left = 0;
+        size->top = 0;
+        size->right = 520;
+        size->bottom = 380;
+        return kResultTrue;
+    }
+    
+    tresult PLUGIN_API isPlatformTypeSupported(FIDString type) override {
+#ifdef __APPLE__
+        return strcmp(type, kPlatformTypeNSView) == 0 ? kResultTrue : kResultFalse;
+#else
+        return kResultFalse;
+#endif
+    }
+
+private:
+    EditController* controller_;
+    NSView* parentView_ = nullptr;
+    NSView* flutterContainerView_ = nullptr;
+    
+    void createEmbeddedFlutterUI() {
+#ifdef __APPLE__
+        if (!parentView_) return;
+        
+        // Create a container view for the UI with bright background for testing
+        NSRect frame = [parentView_ bounds];
+        flutterContainerView_ = [[NSView alloc] initWithFrame:frame];
+        [flutterContainerView_ setWantsLayer:YES];
+        
+        // Use bright red background to make sure it's visible
+        flutterContainerView_.layer.backgroundColor = [[NSColor redColor] CGColor];
+        
+        // Add a simple label to test visibility
+        NSTextField* testLabel = [[NSTextField alloc] initWithFrame:NSMakeRect(50, frame.size.height/2 - 25, frame.size.width - 100, 50)];
+        [testLabel setStringValue:@"ECHO PLUGIN UI TEST - RED BACKGROUND"];
+        [testLabel setAlignment:NSTextAlignmentCenter];
+        [testLabel setBordered:NO];
+        [testLabel setDrawsBackground:NO];
+        [testLabel setEditable:NO];
+        [testLabel setFont:[NSFont boldSystemFontOfSize:18]];
+        [testLabel setTextColor:[NSColor whiteColor]];
+        [testLabel setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
+        [flutterContainerView_ addSubview:testLabel];
+        
+        [parentView_ addSubview:flutterContainerView_];
+        
+        // Set autoresizing
+        [flutterContainerView_ setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
+#endif
+    }
+    
+    void createNativeControls() {
+#ifdef __APPLE__
+        if (!flutterContainerView_) return;
+        
+        NSRect containerBounds = [flutterContainerView_ bounds];
+        
+        // Title
+        NSTextField* titleLabel = [[NSTextField alloc] initWithFrame:NSMakeRect(0, containerBounds.size.height - 60, containerBounds.size.width, 40)];
+        [titleLabel setStringValue:@"ECHO FX"];
+        [titleLabel setAlignment:NSTextAlignmentCenter];
+        [titleLabel setBordered:NO];
+        [titleLabel setDrawsBackground:NO];
+        [titleLabel setEditable:NO];
+        [titleLabel setFont:[NSFont boldSystemFontOfSize:24]];
+        [titleLabel setTextColor:[NSColor whiteColor]];
+        [titleLabel setAutoresizingMask:NSViewWidthSizable | NSViewMinYMargin];
+        [flutterContainerView_ addSubview:titleLabel];
+        
+        // Parameter controls
+        CGFloat knobY = containerBounds.size.height - 200;
+        CGFloat knobSpacing = containerBounds.size.width / 4;
+        CGFloat knobSize = 80;
+        
+        // Delay Time knob
+        createKnobAtPosition(NSMakePoint(knobSpacing - knobSize/2, knobY), 
+                            knobSize, 
+                            @"DELAY", 
+                            0,
+                            [NSColor cyanColor]);
+        
+        // Feedback knob  
+        createKnobAtPosition(NSMakePoint(2*knobSpacing - knobSize/2, knobY), 
+                            knobSize, 
+                            @"FEEDBACK", 
+                            1,
+                            [NSColor purpleColor]);
+        
+        // Mix knob
+        createKnobAtPosition(NSMakePoint(3*knobSpacing - knobSize/2, knobY), 
+                            knobSize, 
+                            @"MIX", 
+                            2,
+                            [NSColor orangeColor]);
+        
+        // Bypass button - simple visual representation
+        NSTextField* bypassLabel = [[NSTextField alloc] initWithFrame:NSMakeRect(containerBounds.size.width/2 - 70, 60, 140, 40)];
+        [bypassLabel setStringValue:@"BYPASS: OFF"];
+        [bypassLabel setAlignment:NSTextAlignmentCenter];
+        [bypassLabel setBordered:YES];
+        [bypassLabel setDrawsBackground:YES];
+        [bypassLabel setBackgroundColor:[NSColor colorWithRed:0.2 green:0.6 blue:0.2 alpha:1.0]];
+        [bypassLabel setEditable:NO];
+        [bypassLabel setFont:[NSFont boldSystemFontOfSize:16]];
+        [bypassLabel setTextColor:[NSColor whiteColor]];
+        [bypassLabel setAutoresizingMask:NSViewMinXMargin | NSViewMaxXMargin | NSViewMinYMargin];
+        [flutterContainerView_ addSubview:bypassLabel];
+#endif
+    }
+    
+    void createKnobAtPosition(NSPoint position, CGFloat size, NSString* label, int paramID, NSColor* color) {
+#ifdef __APPLE__
+        // Knob circle
+        NSView* knobView = [[NSView alloc] initWithFrame:NSMakeRect(position.x, position.y, size, size)];
+        [knobView setWantsLayer:YES];
+        knobView.layer.backgroundColor = [[NSColor colorWithRed:0.16 green:0.16 blue:0.25 alpha:1.0] CGColor];
+        knobView.layer.cornerRadius = size / 2;
+        knobView.layer.borderColor = [color CGColor];
+        knobView.layer.borderWidth = 2.0;
+        [flutterContainerView_ addSubview:knobView];
+        
+        // Label
+        NSTextField* labelField = [[NSTextField alloc] initWithFrame:NSMakeRect(position.x, position.y - 25, size, 20)];
+        [labelField setStringValue:label];
+        [labelField setAlignment:NSTextAlignmentCenter];
+        [labelField setBordered:NO];
+        [labelField setDrawsBackground:NO];
+        [labelField setEditable:NO];
+        [labelField setFont:[NSFont boldSystemFontOfSize:12]];
+        [labelField setTextColor:[NSColor lightGrayColor]];
+        [flutterContainerView_ addSubview:labelField];
+        
+        // Value display
+        NSTextField* valueField = [[NSTextField alloc] initWithFrame:NSMakeRect(position.x + size/4, position.y + size/3, size/2, 20)];
+        [valueField setStringValue:@"50"];
+        [valueField setAlignment:NSTextAlignmentCenter];
+        [valueField setBordered:NO];
+        [valueField setDrawsBackground:NO];
+        [valueField setEditable:NO];
+        [valueField setFont:[NSFont boldSystemFontOfSize:14]];
+        [valueField setTextColor:color];
+        [flutterContainerView_ addSubview:valueField];
+#endif
+    }
+    
+    
+    void closeFlutterApp() {
+        if (flutterContainerView_) {
+            [flutterContainerView_ removeFromSuperview];
+            flutterContainerView_ = nullptr;
+        }
+    }
+};
+
+// Factory function to create Flutter view
+IPlugView* createFlutterView(EditController* controller) {
+    return new {{PLUGIN_CLASS_NAME}}FlutterView(controller);
+}
+
+// Factory function for VST3 plugin creation
+namespace Steinberg {
+namespace Vst {
+namespace {{PLUGIN_CLASS_NAME}} {
+    FUnknown* createControllerInstance(void*) {
+        return static_cast<IEditController*>(new {{PLUGIN_CLASS_NAME}}Controller);
+    }
+}
+}
+}
