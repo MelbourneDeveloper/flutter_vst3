@@ -1,5 +1,4 @@
 import 'dart:ffi' as ffi;
-import 'dart:io';
 
 /// Abstract interface that all Dart VST3 processors must implement
 abstract class VST3Processor {
