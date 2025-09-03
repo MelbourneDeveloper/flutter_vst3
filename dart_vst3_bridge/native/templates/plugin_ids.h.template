@@ -1,0 +1,21 @@
+// Copyright (c) 2025
+// Auto-generated plugin IDs and parameters for {{PLUGIN_NAME}}
+// This file is generated automatically by dart_vst3_bridge at build time.
+// DO NOT EDIT - any changes will be overwritten.
+
+#pragma once
+
+#include "pluginterfaces/base/funknown.h"
+#include "pluginterfaces/vst/vsttypes.h"
+
+using namespace Steinberg;
+
+// Plugin UIDs (generated from plugin name and company)
+static const FUID k{{PLUGIN_CLASS_NAME}}ProcessorUID({{PROCESSOR_UID}});
+static const FUID k{{PLUGIN_CLASS_NAME}}ControllerUID({{CONTROLLER_UID}});
+
+// Parameter IDs
+enum {
+{{PARAMETER_ENUMS}}
+    {{PARAM_COUNT_NAME}} = {{PARAM_COUNT}}
+};

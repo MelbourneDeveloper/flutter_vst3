@@ -6,6 +6,10 @@ This is first and foremost a toolkit for creating VST3 plugins and VST hosts usi
 
 ## Architecture Overview
 
+### VST3 Plugin Architecture with Native Dart Executable
+
+The toolkit uses a unique architecture where Dart code is compiled to **native machine code executables** that communicate with the VST3 wrapper via IPC (Inter-Process Communication). This provides true native performance without requiring the Dart runtime in the DAW.
+
 ```mermaid
 graph TB
     subgraph "DAW Integration"
@@ -18,7 +22,8 @@ graph TB
     subgraph "Dart VST3 Toolkit"
         subgraph "VST Creation"
             FR[flutter_reverb<br/>Pure Dart VST]
-            DVST[dart_vst_creator<br/>VST Building Tools]
+            ECHO[echo<br/>Pure Dart VST]
+            DVST[dart_vst3_bridge<br/>VST Building Tools]
         end
         
         subgraph "VST Hosting"
@@ -28,7 +33,7 @@ graph TB
         
         subgraph "Native Bridge"
             NL[native/<br/>C++ VST3 Implementation]
-            PL[plugin/<br/>VST3 Plugin Wrapper]
+            PL[VST3 Plugin Wrapper<br/>+ IPC to Dart Executable]
         end
         
         subgraph "UI Layer"
@@ -43,6 +48,7 @@ graph TB
     
     %% VST Creation Flow
     FR --> DVST
+    ECHO --> DVST
     DVST --> PL
     PL --> NL
     
@@ -63,11 +69,39 @@ graph TB
     NL --> DAW4
     
     style FR fill:#e1f5fe
+    style ECHO fill:#e1f5fe
     style DVST fill:#e1f5fe
     style DVH fill:#fff3e0
     style DVG fill:#fff3e0
     style NL fill:#f3e5f5
     style PL fill:#f3e5f5
+```
+
+### Native Executable Implementation
+
+```mermaid
+sequenceDiagram
+    participant DAW
+    participant VST3[VST3 Plugin (C++)]
+    participant IPC[Binary IPC Protocol]
+    participant DART[Dart Native Executable]
+    
+    Note over VST3,DART: Plugin Initialization
+    VST3->>DART: Spawn dart_processor executable
+    DART->>VST3: ACK ready
+    
+    Note over DAW,DART: Audio Processing
+    DAW->>VST3: Process audio buffer
+    VST3->>IPC: Send binary audio data
+    IPC->>DART: Deserialize & process
+    DART->>IPC: Return processed audio
+    IPC->>VST3: Binary response
+    VST3->>DAW: Return processed buffer
+    
+    Note over VST3,DART: Parameter Changes
+    DAW->>VST3: Set parameter
+    VST3->>DART: Send parameter update
+    DART->>VST3: ACK parameter change
 ```
 
 ## Package Overview
@@ -76,10 +110,10 @@ graph TB
 
 **Primary Purpose: Build actual VST3 plugins using Dart/Flutter that compile to .vst3 bundles**
 
-- **`dart_vst3_bridge`** - Generic FFI bridge package for building ANY VST3 plugin in pure Dart
-- **`flutter_reverb`** - Complete VST3 reverb plugin implementation in pure Dart (uses dart_vst3_bridge)
-- **`plugin/`** - C++ VST3 wrapper using Steinberg SDK that hosts Dart code via FFI interop layer
-- **`native/`** - C++ infrastructure providing the bridge between VST3 API and Dart audio processing
+- **`dart_vst3_bridge`** - Auto-generates all C++ VST3 boilerplate from Dart parameter definitions
+- **`vsts/flutter_reverb`** - Complete VST3 reverb plugin implementation in pure Dart  
+- **`vsts/echo`** - VST3 echo/delay plugin implementation in pure Dart
+- **Native Executable Compilation** - Dart code compiles to native machine code executables (no runtime required)
 
 ### 🎧 VST Hosting Packages  
 
@@ -96,27 +130,36 @@ graph TB
 
 ## Use Cases
 
-### 1. Creating VST3 Plugins in Dart/Flutter
+### 1. Creating VST3 Plugins in Dart/Flutter  
 
 ```mermaid
 sequenceDiagram
     participant Dev as Developer
-    participant FR as flutter_reverb
-    participant CPP as plugin/ (C++ VST3)
-    participant SDK as VST3 SDK
+    participant Dart as Dart Plugin Code
+    participant CMake as CMake Build
+    participant EXE as Native Executable
+    participant VST3 as VST3 Wrapper
     participant DAW as DAW
 
-    Dev->>FR: Write audio processing in pure Dart
-    Dev->>CPP: C++ wrapper implements VST3 interfaces
-    CPP->>SDK: Uses Steinberg VST3 SDK
-    CPP->>FR: FFI interop layer calls Dart code
-    SDK->>CPP: Compile to .vst3 bundle
-    CPP->>DAW: DAW loads .vst3 bundle
-    DAW->>CPP: Process audio (VST3 API)
-    CPP->>FR: Route to Dart processor via FFI
-    FR->>CPP: Return processed audio
-    CPP->>DAW: Return audio via VST3 API
+    Dev->>Dart: Write audio processing in pure Dart
+    Dev->>CMake: Run build (make reverb-vst)
+    CMake->>EXE: dart compile exe → native binary
+    CMake->>VST3: Generate C++ wrapper code
+    CMake->>VST3: Bundle executable + wrapper
+    DAW->>VST3: Load .vst3 plugin
+    VST3->>EXE: Spawn Dart process
+    DAW->>VST3: Process audio buffer
+    VST3->>EXE: Send via binary IPC
+    EXE->>VST3: Return processed audio
+    VST3->>DAW: Output to DAW
 ```
+
+**Key Benefits:**
+- ✅ **Zero Dart Runtime** - Compiles to native machine code
+- ✅ **Process Isolation** - Plugin crashes won't affect DAW
+- ✅ **Cross-Platform** - Works on Windows/macOS/Linux  
+- ✅ **Small Binary Size** - No VM or runtime overhead
+- ✅ **Auto-Generated C++** - CMake generates all VST3 boilerplate from Dart
 
 ### 2. Building VST Host Applications
 
@@ -191,48 +234,82 @@ dart pub get
 
 ### Building Your First VST Plugin
 
-1. **Study the reference implementation:**
+1. **Study the reference implementations:**
 ```bash
-cd flutter_reverb/
-flutter run example/demo.dart
+# Flutter Reverb plugin
+cd vsts/flutter_reverb/
+dart run example/demo.dart
+
+# Echo plugin  
+cd vsts/echo/
+dart run example/demo.dart
 ```
 
 2. **Build using the Makefile:**
 ```bash
-# Build the complete Flutter Dart Reverb VST3
+# Build the Flutter Reverb VST3 (default)
 make
 
-# Or step by step:
-make reverb-deps      # Install Dart dependencies  
-make reverb-vst       # Build FlutterDartReverb.vst3
-make install          # Install to system VST folder
+# Build specific plugins:
+make reverb-vst       # Build flutter_reverb.vst3
+make echo-vst         # Build echo.vst3
+
+# Install to system VST folder
+make install
 ```
+
+The build process automatically:
+1. Compiles your Dart code to a native executable (`dart compile exe`)
+2. Generates all C++ VST3 wrapper code from your Dart parameter definitions
+3. Bundles everything into a .vst3 plugin ready for any DAW
 
 ### Creating Your Own VST Plugin
 
+1. **Define your parameters with doc comments:**
 ```dart
-// 1. Create your audio processor
-import 'package:dart_vst3_bridge/dart_vst3_bridge.dart';
-
-class MyVST3Processor extends VST3Processor {
-  @override
-  void processStereo(List<double> inputL, List<double> inputR,
-                    List<double> outputL, List<double> outputR) {
-    // Your audio processing here!
-    for (int i = 0; i < inputL.length; i++) {
-      outputL[i] = inputL[i] * 0.5; // Simple gain
-      outputR[i] = inputR[i] * 0.5;
-    }
-  }
-  // Implement other VST3Processor methods...
-}
-
-// 2. Register with bridge in main()
-void main() {
-  VST3Bridge.registerProcessor(MyVST3Processor());
-  registerVST3Callbacks();
+// lib/src/my_parameters.dart
+class MyParameters {
+  /// Controls the output volume (0% = silence, 100% = full volume)
+  double gain = 0.5;
+  
+  /// Adds warmth to the signal (0% = clean, 100% = saturated)
+  double warmth = 0.0;
 }
 ```
+
+2. **Create your processor:**
+```dart
+// lib/src/my_processor.dart
+class MyProcessor {
+  void processStereo(List<double> inputL, List<double> inputR,
+                    List<double> outputL, List<double> outputR,
+                    MyParameters params) {
+    for (int i = 0; i < inputL.length; i++) {
+      outputL[i] = inputL[i] * params.gain;
+      outputR[i] = inputR[i] * params.gain;
+    }
+  }
+}
+```
+
+3. **Create the executable entry point:**
+```dart
+// lib/my_plugin_processor_exe.dart
+import 'dart:io';
+import 'dart:typed_data';
+import 'src/my_processor.dart';
+import 'src/my_parameters.dart';
+
+void main() async {
+  final processor = MyProcessor();
+  final parameters = MyParameters();
+  
+  // Binary IPC protocol implementation
+  // (See echo_processor_exe.dart for full example)
+}
+```
+
+4. **CMake automatically generates everything else!**
 
 ### Building a VST Host Application
 

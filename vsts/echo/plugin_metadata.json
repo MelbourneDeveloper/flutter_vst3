@@ -1,0 +1,43 @@
+{
+  "pluginName": "Echo",
+  "vendor": "CF",
+  "version": "1.0.0",
+  "category": "Fx|Delay",
+  "bundleIdentifier": "com.cf.echo",
+  "companyWeb": "https://cf.com",
+  "companyEmail": "info@cf.com",
+  "parameters": [
+    {
+      "id": 0,
+      "name": "delayTime",
+      "displayName": "Delay Time",
+      "description": "Controls the delay time in milliseconds (0ms to 1000ms)",
+      "defaultValue": 0.5,
+      "units": "ms"
+    },
+    {
+      "id": 1,
+      "name": "feedback",
+      "displayName": "Feedback",
+      "description": "Controls the feedback amount (0% = single echo, 100% = infinite)",
+      "defaultValue": 0.3,
+      "units": "%"
+    },
+    {
+      "id": 2,
+      "name": "mix",
+      "displayName": "Mix",
+      "description": "Controls the wet/dry mix (0% = dry only, 100% = wet only)",
+      "defaultValue": 0.5,
+      "units": "%"
+    },
+    {
+      "id": 3,
+      "name": "bypass",
+      "displayName": "Bypass",
+      "description": "Bypasses the echo effect when enabled",
+      "defaultValue": 0.0,
+      "units": ""
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "pluginName": "Flutter Reverb",
+  "vendor": "Flutter VST3",
+  "version": "1.0.0",
+  "category": "kFxReverb",
+  "bundleIdentifier": "com.flutter.vst3.reverb",
+  "companyWeb": "https://flutter.dev",
+  "companyEmail": "noreply@flutter.dev",
+  "parameters": [
+    {
+      "id": 0,
+      "name": "roomSize",
+      "displayName": "Room Size",
+      "description": "Controls the size of the reverb space (0% = small room, 100% = large hall)",
+      "defaultValue": 0.5,
+      "units": "%"
+    },
+    {
+      "id": 1,
+      "name": "damping",
+      "displayName": "Damping",
+      "description": "Controls high frequency absorption (0% = bright, 100% = dark)",
+      "defaultValue": 0.5,
+      "units": "%"
+    },
+    {
+      "id": 2,
+      "name": "wetLevel",
+      "displayName": "Wet Level",
+      "description": "Controls the level of reverb signal mixed with the input",
+      "defaultValue": 0.3,
+      "units": "%"
+    },
+    {
+      "id": 3,
+      "name": "dryLevel",
+      "displayName": "Dry Level",
+      "description": "Controls the level of direct (unprocessed) signal",
+      "defaultValue": 0.7,
+      "units": "%"
+    }
+  ]
+}

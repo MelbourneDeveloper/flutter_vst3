@@ -1,0 +1,195 @@
+// Copyright (c) 2025
+// Auto-generated VST3 processor for {{PLUGIN_NAME}}
+// This file is generated automatically by dart_vst3_bridge at build time.
+// DO NOT EDIT - any changes will be overwritten.
+
+#include "{{PLUGIN_ID}}_ids.h"
+#include "pluginterfaces/vst/ivstparameterchanges.h"
+#include "pluginterfaces/vst/ivstprocesscontext.h"
+#include "pluginterfaces/base/ibstream.h"
+#include "public.sdk/source/vst/vstaudioeffect.h"
+#include "base/source/fstreamer.h"
+#include "dart_vst3_bridge.h"
+#include <cstring>
+#include <stdexcept>
+
+using namespace Steinberg;
+using namespace Steinberg::Vst;
+
+// Processor for the {{PLUGIN_NAME}} plugin
+class {{PLUGIN_CLASS_NAME}}Processor : public AudioEffect {
+public:
+    {{PLUGIN_CLASS_NAME}}Processor();
+    virtual ~{{PLUGIN_CLASS_NAME}}Processor() = default;
+
+    tresult PLUGIN_API initialize(FUnknown* context) override;
+    tresult PLUGIN_API terminate() override;
+    tresult PLUGIN_API setActive(TBool state) override;
+    tresult PLUGIN_API process(ProcessData& data) override;
+    tresult PLUGIN_API setupProcessing(ProcessSetup& setup) override;
+    tresult PLUGIN_API setBusArrangements(SpeakerArrangement* inputs, int32 numIns,
+                                          SpeakerArrangement* outputs, int32 numOuts) override;
+    tresult PLUGIN_API setState(IBStream* state) override;
+    tresult PLUGIN_API getState(IBStream* state) override;
+    tresult PLUGIN_API getControllerClassId(TUID classId) override;
+
+private:
+{{PARAMETER_VARIABLES}}
+    double sampleRate = 44100.0;
+    
+    // Dart VST3 bridge instance
+    DartVST3Instance* dartInstance = nullptr;
+};
+
+{{PLUGIN_CLASS_NAME}}Processor::{{PLUGIN_CLASS_NAME}}Processor() {
+    setControllerClass(k{{PLUGIN_CLASS_NAME}}ControllerUID);
+    
+    // CRITICAL ARCHITECTURE PROBLEM: This VST3 plugin requires Dart runtime!
+    // The current architecture assumes the VST3 is loaded by a Dart application,
+    // but DAWs like Ableton don't have Dart runtime.
+    //
+    // TODO: Either embed Dart VM in this plugin OR redesign the bridge architecture
+    // For now, create instance but expect it to fail during audio processing
+    dartInstance = dart_vst3_create_instance("{{PLUGIN_ID}}");
+    
+    if (dartInstance == nullptr) {
+        // Log the issue but don't crash during construction
+        fprintf(stderr, "WARNING: Failed to create Dart VST3 instance for '{{PLUGIN_ID}}'\n");
+        fprintf(stderr, "This plugin requires Dart runtime support which is missing!\n");
+        fflush(stderr);
+    }
+{{PARAMETER_DEFAULTS}}
+}
+
+tresult {{PLUGIN_CLASS_NAME}}Processor::initialize(FUnknown* context) {
+    tresult result = AudioEffect::initialize(context);
+    if (result != kResultTrue) return result;
+
+    // Configure audio buses - stereo in/out by default
+    addAudioInput(STR16("Stereo In"), SpeakerArr::kStereo);
+    addAudioOutput(STR16("Stereo Out"), SpeakerArr::kStereo);
+
+    return kResultTrue;
+}
+
+tresult {{PLUGIN_CLASS_NAME}}Processor::terminate() {
+    if (dartInstance) {
+        dart_vst3_dispose(dartInstance);
+        dart_vst3_destroy_instance(dartInstance);
+        dartInstance = nullptr;
+    }
+    return AudioEffect::terminate();
+}
+
+tresult {{PLUGIN_CLASS_NAME}}Processor::setActive(TBool state) {
+    if (state) {
+        // Plugin activated - initialize Dart processor
+        if (dartInstance) {
+            dart_vst3_initialize(dartInstance, sampleRate, 512);
+        }
+    } else {
+        // Plugin deactivated - reset Dart processor
+        if (dartInstance) {
+            dart_vst3_reset(dartInstance);
+        }
+    }
+    return AudioEffect::setActive(state);
+}
+
+tresult {{PLUGIN_CLASS_NAME}}Processor::setupProcessing(ProcessSetup& setup) {
+    sampleRate = setup.sampleRate;
+    return AudioEffect::setupProcessing(setup);
+}
+
+tresult {{PLUGIN_CLASS_NAME}}Processor::setBusArrangements(SpeakerArrangement* inputs, int32 numIns,
+                                                          SpeakerArrangement* outputs, int32 numOuts) {
+    // Only accept stereo input/output
+    if (numIns == 1 && numOuts == 1 && inputs[0] == SpeakerArr::kStereo && outputs[0] == SpeakerArr::kStereo) {
+        return AudioEffect::setBusArrangements(inputs, numIns, outputs, numOuts);
+    }
+    return kResultFalse;
+}
+
+tresult {{PLUGIN_CLASS_NAME}}Processor::process(ProcessData& data) {
+    // Process parameter changes
+    if (data.inputParameterChanges) {
+        int32 numParamsChanged = data.inputParameterChanges->getParameterCount();
+        for (int32 i = 0; i < numParamsChanged; i++) {
+            IParamValueQueue* paramQueue = data.inputParameterChanges->getParameterData(i);
+            if (paramQueue) {
+                ParamValue value;
+                int32 sampleOffset;
+                int32 numPoints = paramQueue->getPointCount();
+                
+                if (paramQueue->getPoint(numPoints - 1, sampleOffset, value) == kResultTrue) {
+                    // Forward parameter changes to Dart processor
+                    if (dartInstance) {
+                        dart_vst3_set_parameter(dartInstance, paramQueue->getParameterId(), value);
+                    }
+                }
+            }
+        }
+    }
+
+    // Process audio
+    if (data.numInputs == 0 || data.numOutputs == 0) {
+        return kResultOk;
+    }
+
+    AudioBusBuffers* input = &data.inputs[0];
+    AudioBusBuffers* output = &data.outputs[0];
+    
+    int32 numChannels = input->numChannels;
+    int32 sampleFrames = data.numSamples;
+    
+    if (numChannels > 0 && sampleFrames > 0) {
+        if (dartInstance && numChannels >= 2) {
+            // Process stereo audio through Dart
+            Sample32* inputL = input->channelBuffers32[0];
+            Sample32* inputR = input->channelBuffers32[1];
+            Sample32* outputL = output->channelBuffers32[0];
+            Sample32* outputR = output->channelBuffers32[1];
+            
+            dart_vst3_process_stereo(dartInstance, inputL, inputR, outputL, outputR, sampleFrames);
+        } else {
+            // NO FALLBACKS! FAIL HARD!
+            throw std::runtime_error("VST3 PROCESSOR CRITICAL FAILURE: Dart instance is null or audio is not stereo! Plugin cannot function without proper Dart processor!");
+        }
+    }
+
+    return kResultOk;
+}
+
+tresult {{PLUGIN_CLASS_NAME}}Processor::setState(IBStream* state) {
+    if (!state) return kResultFalse;
+
+    // Read parameter values
+{{PARAMETER_STATE_READ}}
+
+    return kResultOk;
+}
+
+tresult {{PLUGIN_CLASS_NAME}}Processor::getState(IBStream* state) {
+    if (!state) return kResultFalse;
+
+    // Write parameter values
+{{PARAMETER_STATE_WRITE}}
+
+    return kResultOk;
+}
+
+tresult {{PLUGIN_CLASS_NAME}}Processor::getControllerClassId(TUID classId) {
+    memcpy(classId, k{{PLUGIN_CLASS_NAME}}ControllerUID, sizeof(TUID));
+    return kResultTrue;
+}
+
+// Factory functions in proper namespace  
+namespace Steinberg {
+namespace Vst {
+namespace {{PLUGIN_CLASS_NAME}} {
+    FUnknown* createProcessorInstance(void*) {
+        return (IAudioProcessor*)new {{PLUGIN_CLASS_NAME}}Processor();
+    }
+}
+}
+}

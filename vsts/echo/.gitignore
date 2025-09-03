@@ -1,0 +1,19 @@
+
+# Build directories
+build/
+
+# Dart generated files
+.dart_tool/
+.packages
+pubspec.lock
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+generated/

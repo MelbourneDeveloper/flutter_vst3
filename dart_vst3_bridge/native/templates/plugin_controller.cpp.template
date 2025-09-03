@@ -1,0 +1,94 @@
+// Copyright (c) 2025
+// Auto-generated VST3 controller for {{PLUGIN_NAME}}
+// This file is generated automatically by dart_vst3_bridge at build time.
+// DO NOT EDIT - any changes will be overwritten.
+
+#include "{{PLUGIN_ID}}_ids.h"
+#include "pluginterfaces/base/ibstream.h"
+#include "pluginterfaces/base/ustring.h"
+#include "pluginterfaces/vst/ivstmidicontrollers.h"
+#include "public.sdk/source/vst/vsteditcontroller.h"
+
+using namespace Steinberg;
+using namespace Steinberg::Vst;
+
+// Controller for the {{PLUGIN_NAME}} plugin
+class {{PLUGIN_CLASS_NAME}}Controller : public EditController {
+public:
+    {{PLUGIN_CLASS_NAME}}Controller() = default;
+    
+    tresult PLUGIN_API initialize(FUnknown* context) override {
+        tresult result = EditController::initialize(context);
+        if (result != kResultTrue) return result;
+
+        // Add parameters to controller
+{{PARAMETER_CONTROLLER_INIT}}
+
+        return kResultTrue;
+    }
+
+    tresult PLUGIN_API setComponentState(IBStream* state) override {
+        if (!state) return kResultFalse;
+
+        // Read parameter values from processor state
+        for (int32 i = 0; i < {{PARAMETER_COUNT}}; ++i) {
+            double value = 0.0;
+            int32 bytesRead = 0;
+            if (state->read(&value, sizeof(value), &bytesRead) == kResultTrue) {
+                setParamNormalized(i, value);
+            }
+        }
+
+        return kResultTrue;
+    }
+
+    tresult PLUGIN_API setState(IBStream* state) override {
+        return setComponentState(state);
+    }
+
+    tresult PLUGIN_API getState(IBStream* state) override {
+        if (!state) return kResultFalse;
+
+        // Write current parameter values
+        for (int32 i = 0; i < {{PARAMETER_COUNT}}; ++i) {
+            double value = getParamNormalized(i);
+            int32 bytesWritten = 0;
+            state->write(&value, sizeof(value), &bytesWritten);
+        }
+
+        return kResultTrue;
+    }
+
+    // Convert normalized parameter values to display strings
+    tresult PLUGIN_API getParamStringByValue(ParamID id, ParamValue valueNormalized, String128 string) override {
+{{PARAMETER_TO_STRING}}
+        return EditController::getParamStringByValue(id, valueNormalized, string);
+    }
+
+    // Convert display strings to normalized parameter values  
+    tresult PLUGIN_API getParamValueByString(ParamID id, TChar* string, ParamValue& valueNormalized) override {
+{{STRING_TO_PARAMETER}}
+        return EditController::getParamValueByString(id, string, valueNormalized);
+    }
+
+    // Create view (UI) for the plugin - integrates with Flutter UI
+    IPlugView* PLUGIN_API createView(FIDString name) override {
+        if (strcmp(name, ViewType::kEditor) == 0) {
+            // TODO: Return Flutter-based UI view
+            // For now, return nullptr to use generic host UI
+            return nullptr;
+        }
+        return nullptr;
+    }
+};
+
+// Factory functions in proper namespace
+namespace Steinberg {
+namespace Vst {
+namespace {{PLUGIN_CLASS_NAME}} {
+    FUnknown* createControllerInstance(void*) {
+        return (IEditController*)new {{PLUGIN_CLASS_NAME}}Controller();
+    }
+}
+}
+}

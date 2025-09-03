@@ -1,0 +1,23 @@
+name: echo
+description: A simple echo VST3 plugin with obvious delay effect
+version: 1.0.0
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: ">=3.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  dart_vst3_bridge:
+    path: ../../dart_vst3_bridge
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  test: ^1.24.0
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true

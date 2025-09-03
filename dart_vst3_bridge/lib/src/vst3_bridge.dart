@@ -26,10 +26,20 @@ abstract class VST3Processor {
   void dispose();
 }
 
+/// Callback function signatures for FFI
+typedef DartInitializeProcessorNative = ffi.Void Function(ffi.Double, ffi.Int32);
+typedef DartProcessAudioNative = ffi.Void Function(ffi.Pointer<ffi.Float>, ffi.Pointer<ffi.Float>, ffi.Pointer<ffi.Float>, ffi.Pointer<ffi.Float>, ffi.Int32);
+typedef DartSetParameterNative = ffi.Void Function(ffi.Int32, ffi.Double);
+typedef DartGetParameterNative = ffi.Double Function(ffi.Int32);
+typedef DartGetParameterCountNative = ffi.Int32 Function();
+typedef DartResetNative = ffi.Void Function();
+typedef DartDisposeNative = ffi.Void Function();
+
 /// Main FFI bridge between Dart VST3 plugins and C++ VST3 infrastructure
 class VST3Bridge {
   static final _dylib = _loadLibrary();
   static VST3Processor? _processor;
+  
   
   static ffi.DynamicLibrary _loadLibrary() {
     if (Platform.isMacOS) {
@@ -47,12 +57,16 @@ class VST3Bridge {
   /// This must be called before the VST3 plugin can process audio
   static void registerProcessor(VST3Processor processor) {
     _processor = processor;
+    print('Dart VST3 processor registered locally (callbacks not yet implemented in FFI layer)');
   }
 
   /// Initialize the processor
   /// Called from C++ when VST3 plugin is initialized
   static void initializeProcessor(double sampleRate, int maxBlockSize) {
-    _processor?.initialize(sampleRate, maxBlockSize);
+    if (_processor == null) {
+      throw StateError('CRITICAL VST3 BRIDGE FAILURE: Cannot initialize - no processor registered! Call VST3Bridge.registerProcessor() before using the plugin!');
+    }
+    _processor!.initialize(sampleRate, maxBlockSize);
   }
 
   /// Process stereo audio block
@@ -62,7 +76,9 @@ class VST3Bridge {
                           ffi.Pointer<ffi.Float> outputL, 
                           ffi.Pointer<ffi.Float> outputR,
                           int numSamples) {
-    if (_processor == null) return;
+    if (_processor == null) {
+      throw StateError('CRITICAL VST3 BRIDGE FAILURE: No processor registered! Audio processing CANNOT continue without a Dart processor! Call VST3Bridge.registerProcessor() first!');
+    }
 
     // Convert C pointers to Dart lists
     final inL = inputL.asTypedList(numSamples);

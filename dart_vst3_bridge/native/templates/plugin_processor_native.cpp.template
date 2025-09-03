@@ -1,0 +1,291 @@
+// WORKING NATIVE PROCESSOR - NO AOT BULLSHIT!
+#include <iostream>
+#include <stdexcept>
+#include <vector>
+#include <cstring>
+#include <thread>
+#include <mutex>
+#include <libgen.h>
+#include <mach-o/dyld.h>
+#include <limits.h>
+#include <cstdlib>
+#include <dlfcn.h>
+
+#ifdef _WIN32
+    #include <windows.h>
+#else
+    #include <unistd.h>
+    #include <sys/wait.h>
+#endif
+
+constexpr uint8_t CMD_INIT = 0x01;
+constexpr uint8_t CMD_PROCESS = 0x02;
+constexpr uint8_t CMD_SET_PARAM = 0x03;
+constexpr uint8_t CMD_TERMINATE = 0xFF;
+
+// Forward declaration to get address for dladdr
+static void dummy_function() {}
+
+class {{PLUGIN_CLASS_NAME}}NativeProcessor {
+private:
+    FILE* to_dart = nullptr;
+    FILE* from_dart = nullptr;
+    bool initialized = false;
+    std::mutex io_mutex;
+    std::string dart_exe_path;
+    
+#ifdef _WIN32
+    HANDLE hProcess = NULL;
+#else
+    pid_t child_pid = -1;
+#endif
+
+    std::string getExecutablePath() {
+        // Use dladdr to get the path of the current shared object (VST3 binary)
+        Dl_info dl_info;
+        if (dladdr((void*)&dummy_function, &dl_info) != 0) {
+            char* path_copy = strdup(dl_info.dli_fname);
+            char* dir = dirname(path_copy);
+            std::string dart_path = std::string(dir) + "/{{PLUGIN_ID}}_processor";
+            
+            // fprintf(stderr, "{{PLUGIN_NAME_UPPER}}: VST3 binary at: %s\n", dl_info.dli_fname);
+            // fprintf(stderr, "{{PLUGIN_NAME_UPPER}}: Looking for Dart executable at: %s\n", dart_path.c_str());
+            
+            free(path_copy);
+            return dart_path;
+        }
+        throw std::runtime_error("FAILED TO GET VST3 BINARY PATH!");
+    }
+
+public:
+    void initialize(double sampleRate, int maxBlockSize) {
+        if (initialized) return;
+        
+        // Get path to Dart executable relative to VST3 binary
+        dart_exe_path = getExecutablePath();
+        
+        // SPAWN THE DART EXECUTABLE
+#ifdef _WIN32
+        // Windows implementation
+        SECURITY_ATTRIBUTES sa;
+        sa.nLength = sizeof(SECURITY_ATTRIBUTES);
+        sa.bInheritHandle = TRUE;
+        sa.lpSecurityDescriptor = NULL;
+        
+        HANDLE stdin_r, stdin_w, stdout_r, stdout_w;
+        CreatePipe(&stdin_r, &stdin_w, &sa, 0);
+        CreatePipe(&stdout_r, &stdout_w, &sa, 0);
+        SetHandleInformation(stdin_w, HANDLE_FLAG_INHERIT, 0);
+        SetHandleInformation(stdout_r, HANDLE_FLAG_INHERIT, 0);
+        
+        STARTUPINFO si = {0};
+        si.cb = sizeof(STARTUPINFO);
+        si.hStdInput = stdin_r;
+        si.hStdOutput = stdout_w;
+        si.hStdError = stdout_w;
+        si.dwFlags = STARTF_USESTDHANDLES;
+        
+        PROCESS_INFORMATION pi;
+        if (!CreateProcess("{{PLUGIN_ID}}_processor.exe", NULL, NULL, NULL, 
+                          TRUE, 0, NULL, NULL, &si, &pi)) {
+            throw std::runtime_error("FAILED TO START {{PLUGIN_ID}}_processor.exe!");
+        }
+        
+        hProcess = pi.hProcess;
+        CloseHandle(pi.hThread);
+        CloseHandle(stdin_r);
+        CloseHandle(stdout_w);
+        
+        to_dart = _fdopen(_open_osfhandle((intptr_t)stdin_w, 0), "wb");
+        from_dart = _fdopen(_open_osfhandle((intptr_t)stdout_r, 0), "rb");
+#else
+        // Unix implementation with bidirectional pipe
+        int to_child[2], from_child[2];
+        if (pipe(to_child) == -1 || pipe(from_child) == -1) {
+            throw std::runtime_error("FAILED TO CREATE PIPES!");
+        }
+        
+        child_pid = fork();
+        if (child_pid == -1) {
+            throw std::runtime_error("FAILED TO FORK!");
+        }
+        
+        if (child_pid == 0) {
+            // Child process
+            dup2(to_child[0], STDIN_FILENO);
+            dup2(from_child[1], STDOUT_FILENO);
+            close(to_child[0]);
+            close(to_child[1]);
+            close(from_child[0]);
+            close(from_child[1]);
+            
+            // fprintf(stderr, "{{PLUGIN_NAME_UPPER}}: Child process executing: %s\n", dart_exe_path.c_str());
+            // fflush(stderr);
+            execl(dart_exe_path.c_str(), "{{PLUGIN_ID}}_processor", nullptr);
+            // fprintf(stderr, "{{PLUGIN_NAME_UPPER}}: exec failed!\n");
+            // fflush(stderr);
+            exit(1); // exec failed
+        }
+        
+        // Parent process
+        close(to_child[0]);
+        close(from_child[1]);
+        to_dart = fdopen(to_child[1], "wb");
+        from_dart = fdopen(from_child[0], "rb");
+#endif
+        
+        // Send init command
+        uint8_t init_msg[9];
+        init_msg[0] = CMD_INIT;
+        memcpy(&init_msg[1], &sampleRate, sizeof(double));
+        
+        fwrite(init_msg, 1, 9, to_dart);
+        fflush(to_dart);
+        
+        // Wait for ACK
+        uint8_t ack;
+        if (fread(&ack, 1, 1, from_dart) != 1 || ack != CMD_INIT) {
+            throw std::runtime_error("DART PROCESS FAILED TO INITIALIZE!");
+        }
+        
+        initialized = true;
+    }
+    
+    void processStereo(float* inputL, float* inputR, 
+                      float* outputL, float* outputR, int numSamples) {
+        if (!initialized) {
+            throw std::runtime_error("NOT INITIALIZED!");
+        }
+        
+        std::lock_guard<std::mutex> lock(io_mutex);
+        
+        // Create message
+        size_t msg_size = 5 + numSamples * 8;
+        std::vector<uint8_t> message(msg_size);
+        
+        message[0] = CMD_PROCESS;
+        memcpy(&message[1], &numSamples, sizeof(int32_t));
+        
+        // Interleave audio
+        float* data = (float*)&message[5];
+        for (int i = 0; i < numSamples; i++) {
+            data[i * 2] = inputL[i];
+            data[i * 2 + 1] = inputR[i];
+        }
+        
+        // Send to Dart
+        if (fwrite(message.data(), 1, msg_size, to_dart) != msg_size) {
+            throw std::runtime_error("FAILED TO SEND AUDIO TO DART!");
+        }
+        fflush(to_dart);
+        
+        // Read response
+        uint8_t response_cmd;
+        if (fread(&response_cmd, 1, 1, from_dart) != 1 || response_cmd != CMD_PROCESS) {
+            throw std::runtime_error("INVALID RESPONSE FROM DART!");
+        }
+        
+        // Read processed audio
+        std::vector<float> processed(numSamples * 2);
+        if (fread(processed.data(), sizeof(float), numSamples * 2, from_dart) != numSamples * 2) {
+            throw std::runtime_error("FAILED TO READ PROCESSED AUDIO!");
+        }
+        
+        // De-interleave
+        for (int i = 0; i < numSamples; i++) {
+            outputL[i] = processed[i * 2];
+            outputR[i] = processed[i * 2 + 1];
+        }
+    }
+    
+    void setParameter(int paramId, double value) {
+        if (!initialized) return;
+        
+        uint8_t msg[13];
+        msg[0] = CMD_SET_PARAM;
+        memcpy(&msg[1], &paramId, sizeof(int32_t));
+        memcpy(&msg[5], &value, sizeof(double));
+        
+        fwrite(msg, 1, 13, to_dart);
+        fflush(to_dart);
+        
+        uint8_t ack;
+        fread(&ack, 1, 1, from_dart);
+    }
+    
+    void reset() {
+        // Implemented if needed
+    }
+    
+    void dispose() {
+        if (!initialized) return;
+        
+        uint8_t term = CMD_TERMINATE;
+        fwrite(&term, 1, 1, to_dart);
+        fflush(to_dart);
+        
+        fclose(to_dart);
+        fclose(from_dart);
+        
+#ifdef _WIN32
+        WaitForSingleObject(hProcess, 5000);
+        CloseHandle(hProcess);
+#else
+        int status;
+        waitpid(child_pid, &status, 0);
+#endif
+        
+        initialized = false;
+    }
+    
+    ~{{PLUGIN_CLASS_NAME}}NativeProcessor() {
+        dispose();
+    }
+};
+
+// Global instance
+static {{PLUGIN_CLASS_NAME}}NativeProcessor* g_processor = nullptr;
+
+// C interface
+extern "C" {
+    void {{PLUGIN_ID}}_native_initialize(double sample_rate, int max_block_size) {
+        try {
+            if (!g_processor) g_processor = new {{PLUGIN_CLASS_NAME}}NativeProcessor();
+            g_processor->initialize(sample_rate, max_block_size);
+        } catch (const std::exception& e) {
+            fprintf(stderr, "{{PLUGIN_NAME_UPPER}} NATIVE FAILURE: %s\n", e.what());
+            abort(); // FAIL HARD!
+        }
+    }
+    
+    void {{PLUGIN_ID}}_native_process_stereo(float* inputL, float* inputR,
+                                   float* outputL, float* outputR, int samples) {
+        try {
+            if (!g_processor) throw std::runtime_error("NOT INITIALIZED!");
+            g_processor->processStereo(inputL, inputR, outputL, outputR, samples);
+        } catch (const std::exception& e) {
+            fprintf(stderr, "{{PLUGIN_NAME_UPPER}} NATIVE FAILURE: %s\n", e.what());
+            abort(); // FAIL HARD!
+        }
+    }
+    
+    void {{PLUGIN_ID}}_native_set_parameter(int param_id, double value) {
+        if (g_processor) g_processor->setParameter(param_id, value);
+    }
+    
+    double {{PLUGIN_ID}}_native_get_parameter(int param_id) {
+        return 0.0; // Implement if needed
+    }
+    
+    void {{PLUGIN_ID}}_native_reset() {
+        if (g_processor) g_processor->reset();
+    }
+    
+    void {{PLUGIN_ID}}_native_dispose() {
+        if (g_processor) {
+            g_processor->dispose();
+            delete g_processor;
+            g_processor = nullptr;
+        }
+    }
+}

@@ -1,7 +1,7 @@
 # Dart VST3 Toolkit Makefile
 # Builds VST3 plugins from pure Dart source code
 
-.PHONY: all build test clean clean-native clean-plugin help dart-deps flutter-deps reverb-vst install reverb reverb-build-only
+.PHONY: all build test clean clean-native clean-plugin help dart-deps flutter-deps reverb-vst install reverb reverb-build-only echo echo-vst echo-build-only echo-deps
 
 # Default target - build the Flutter Dart Reverb VST3
 all: reverb
@@ -10,11 +10,11 @@ all: reverb
 build: native plugin dart-deps flutter-deps reverb-vst
 
 # Build the Flutter Dart Reverb VST3 plugin
-reverb: native reverb-deps
+reverb: reverb-deps
 	@echo "Building Flutter Dart Reverb VST3 plugin..."
-	@mkdir -p plugin/build
-	@cd plugin/build && cmake .. && make
-	@echo "✅ VST3 plugin built: plugin/build/FlutterDartReverb.vst3"
+	@mkdir -p vsts/flutter_reverb/build
+	@cd vsts/flutter_reverb/build && cmake -DCMAKE_BUILD_TYPE=Release .. && make -j$(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 1)
+	@echo "✅ VST3 plugin built: vsts/flutter_reverb/build/VST3/Release/flutter_reverb.vst3"
 
 # Alias for reverb
 reverb-vst: reverb
@@ -22,20 +22,35 @@ reverb-vst: reverb
 # Build reverb VST3 without installing (explicit build-only target)
 reverb-build-only: reverb
 
+# Build the Echo VST3 plugin  
+echo: echo-deps
+	@echo "Building Echo VST3 plugin..."
+	@mkdir -p vsts/echo/build
+	@cd vsts/echo/build && cmake -DCMAKE_BUILD_TYPE=Release .. && make -j$(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 1)
+	@echo "✅ VST3 plugin built: vsts/echo/build/VST3/Release/echo.vst3"
+
+# Alias for echo
+echo-vst: echo
+
+# Build echo VST3 without installing (explicit build-only target)
+echo-build-only: echo
+
 # Run all tests
 test: build
 	@echo "Running dart_vst3_bridge tests..."
 	cd dart_vst3_bridge && dart test || true
 	@echo "Running flutter_reverb tests..."
-	cd flutter_reverb && dart test || true
+	cd vsts/flutter_reverb && dart test || true
+	@echo "Running echo tests..."
+	cd vsts/echo && dart test || true
 	@echo "Running dart_vst_host tests..."
 	cd dart_vst_host && dart test
 	@echo "Running dart_vst_graph tests..."
 	cd dart_vst_graph && dart test
 
-# Build native library (required for all Dart components)
+# Build native libraries (required for all Dart components)
 native: clean-native
-	@echo "Building native library..."
+	@echo "Building native libraries..."
 	@if [ -z "$(VST3_SDK_DIR)" ]; then \
 		if [ -d "vst3sdk" ]; then \
 			export VST3_SDK_DIR="$(shell pwd)/vst3sdk"; \
@@ -49,41 +64,41 @@ native: clean-native
 			exit 1; \
 		fi; \
 	fi
+	@echo "Building dart_vst_host library..."
 	@if [ -d "/workspace" ]; then \
-		mkdir -p /workspace/native/build; \
-		cd /workspace/native/build && VST3_SDK_DIR=$${VST3_SDK_DIR:-/workspace/vst3sdk} cmake .. && make; \
-		cp /workspace/native/build/libdart_vst_host.* /workspace/ 2>/dev/null || true; \
-		cp /workspace/native/build/libdart_vst_host.* /workspace/dart_vst_host/ 2>/dev/null || true; \
-		cp /workspace/native/build/libdart_vst_host.* /workspace/dart_vst_graph/ 2>/dev/null || true; \
+		mkdir -p /workspace/dart_vst_host/native/build; \
+		cd /workspace/dart_vst_host/native/build && VST3_SDK_DIR=$${VST3_SDK_DIR:-/workspace/vst3sdk} cmake .. && make; \
+		cp /workspace/dart_vst_host/native/build/libdart_vst_host.* /workspace/ 2>/dev/null || true; \
+		cp /workspace/dart_vst_host/native/build/libdart_vst_host.* /workspace/dart_vst_host/ 2>/dev/null || true; \
 	else \
-		mkdir -p native/build; \
-		cd native/build && VST3_SDK_DIR=$${VST3_SDK_DIR:-$(shell pwd)/vst3sdk} cmake .. && make; \
-		cp native/build/libdart_vst_host.* . 2>/dev/null || true; \
-		cp native/build/libdart_vst_host.* dart_vst_host/ 2>/dev/null || true; \
-		cp native/build/libdart_vst_host.* dart_vst_graph/ 2>/dev/null || true; \
+		mkdir -p dart_vst_host/native/build; \
+		cd dart_vst_host/native/build && VST3_SDK_DIR=$${VST3_SDK_DIR:-$(shell pwd)/vst3sdk} cmake .. && make; \
+		cp dart_vst_host/native/build/libdart_vst_host.* . 2>/dev/null || true; \
+		cp dart_vst_host/native/build/libdart_vst_host.* dart_vst_host/ 2>/dev/null || true; \
 	fi
-	@echo "Native library built and copied to required locations"
+	@echo "Building dart_vst_graph library..."
+	@if [ -d "/workspace" ]; then \
+		mkdir -p /workspace/dart_vst_graph/native/build; \
+		cd /workspace/dart_vst_graph/native/build && VST3_SDK_DIR=$${VST3_SDK_DIR:-/workspace/vst3sdk} cmake .. && make; \
+		cp /workspace/dart_vst_graph/native/build/libdart_vst_graph.* /workspace/ 2>/dev/null || true; \
+		cp /workspace/dart_vst_graph/native/build/libdart_vst_graph.* /workspace/dart_vst_graph/ 2>/dev/null || true; \
+	else \
+		mkdir -p dart_vst_graph/native/build; \
+		cd dart_vst_graph/native/build && VST3_SDK_DIR=$${VST3_SDK_DIR:-$(shell pwd)/vst3sdk} cmake .. && make; \
+		cp dart_vst_graph/native/build/libdart_vst_graph.* . 2>/dev/null || true; \
+		cp dart_vst_graph/native/build/libdart_vst_graph.* dart_vst_graph/ 2>/dev/null || true; \
+	fi
+	@echo "Native libraries built and copied to required locations"
 
-# Build VST3 plugin
+# Build all VST3 plugins
 plugin: native clean-plugin
-	@echo "Building VST3 plugin..."
-	@if [ -z "$(VST3_SDK_DIR)" ]; then \
-		if [ -d "vst3sdk" ]; then \
-			export VST3_SDK_DIR="$(shell pwd)/vst3sdk"; \
-		elif [ -d "/workspace/vst3sdk" ]; then \
-			export VST3_SDK_DIR="/workspace/vst3sdk"; \
-		else \
-			echo "Error: VST3_SDK_DIR environment variable not set"; \
-			exit 1; \
+	@echo "Building all VST3 plugins..."
+	@for plugin in vsts/*/; do \
+		if [ -f "$$plugin/CMakeLists.txt" ]; then \
+			echo "Building $$plugin"; \
+			cd "$$plugin" && mkdir -p build && cd build && cmake .. && make && cd ../../../; \
 		fi; \
-	fi
-	@if [ -d "/workspace" ]; then \
-		mkdir -p /workspace/plugin/build; \
-		cd /workspace/plugin/build && VST3_SDK_DIR=$${VST3_SDK_DIR:-/workspace/vst3sdk} cmake .. && make; \
-	else \
-		mkdir -p plugin/build; \
-		cd plugin/build && VST3_SDK_DIR=$${VST3_SDK_DIR:-$(shell pwd)/vst3sdk} cmake .. && make; \
-	fi
+	done
 
 # Install Dart dependencies for all packages
 dart-deps:
@@ -103,10 +118,21 @@ reverb-deps:
 	@echo "Installing Flutter Dart Reverb dependencies..."
 	@if [ -d "/workspace" ]; then \
 		dart pub get --directory=/workspace/dart_vst3_bridge; \
-		dart pub get --directory=/workspace/flutter_reverb; \
+		dart pub get --directory=/workspace/vsts/flutter_reverb; \
 	else \
 		dart pub get --directory=dart_vst3_bridge; \
-		dart pub get --directory=flutter_reverb; \
+		dart pub get --directory=vsts/flutter_reverb; \
+	fi
+
+# Install echo plugin dependencies
+echo-deps:
+	@echo "Installing Echo plugin dependencies..."
+	@if [ -d "/workspace" ]; then \
+		dart pub get --directory=/workspace/dart_vst3_bridge; \
+		dart pub get --directory=/workspace/vsts/echo; \
+	else \
+		dart pub get --directory=dart_vst3_bridge; \
+		dart pub get --directory=vsts/echo; \
 	fi
 
 # Install Flutter dependencies
@@ -120,14 +146,14 @@ flutter-deps:
 
 # Install VST3 plugin to system location (macOS/Linux)
 install: reverb-vst
-	@echo "Installing FlutterDartReverb.vst3..."
+	@echo "Installing flutter_reverb.vst3..."
 	@if [ "$$(uname)" = "Darwin" ]; then \
 		mkdir -p ~/Library/Audio/Plug-Ins/VST3/; \
-		cp -r plugin/build/FlutterDartReverb.vst3 ~/Library/Audio/Plug-Ins/VST3/; \
+		cp -r vsts/flutter_reverb/build/VST3/Release/flutter_reverb.vst3 ~/Library/Audio/Plug-Ins/VST3/; \
 		echo "✅ Installed to ~/Library/Audio/Plug-Ins/VST3/"; \
 	elif [ "$$(uname)" = "Linux" ]; then \
 		mkdir -p ~/.vst3/; \
-		cp plugin/build/FlutterDartReverb.vst3 ~/.vst3/; \
+		cp -r vsts/flutter_reverb/build/VST3/Release/flutter_reverb.vst3 ~/.vst3/; \
 		echo "✅ Installed to ~/.vst3/"; \
 	else \
 		echo "⚠️  Manual installation required on this platform"; \
@@ -139,25 +165,28 @@ clean: clean-native clean-plugin
 	rm -f libdart_vst_host.*
 	rm -f *.dylib *.so *.dll
 	rm -f dart_vst_host/libdart_vst_host.*
-	rm -f dart_vst_graph/libdart_vst_host.*
+	rm -f dart_vst_graph/libdart_vst_graph.*
 
-# Clean native library build
+# Clean native library builds
 clean-native:
-	@echo "Cleaning native build..."
+	@echo "Cleaning native builds..."
 	@if [ -d "/workspace" ]; then \
-		rm -rf /workspace/native/build; \
+		rm -rf /workspace/dart_vst_host/native/build; \
+		rm -rf /workspace/dart_vst_graph/native/build; \
 	else \
-		rm -rf native/build; \
+		rm -rf dart_vst_host/native/build; \
+		rm -rf dart_vst_graph/native/build; \
 	fi
 
-# Clean plugin build
+# Clean plugin builds
 clean-plugin:
-	@echo "Cleaning plugin build..."
-	@if [ -d "/workspace" ]; then \
-		rm -rf /workspace/plugin/build; \
-	else \
-		rm -rf plugin/build; \
-	fi
+	@echo "Cleaning all VST plugin builds..."
+	@for plugin in vsts/*/; do \
+		if [ -d "$$plugin/build" ]; then \
+			echo "Cleaning $$plugin"; \
+			rm -rf "$$plugin/build"; \
+		fi; \
+	done
 
 # Run Flutter app
 run-flutter: flutter-deps
@@ -187,10 +216,13 @@ help:
 	@echo "🎯 PRIMARY TARGET:"
 	@echo "  all (default)   - Build Flutter Dart Reverb VST3 plugin"
 	@echo ""
-	@echo "🎛️ REVERB VST TARGETS:"
+	@echo "🎛️ PLUGIN TARGETS:"
 	@echo "  reverb-vst      - Build Flutter Dart Reverb VST3 plugin"
 	@echo "  reverb-build-only - Build Flutter Dart Reverb VST3 plugin (no install)"
-	@echo "  reverb-deps     - Install reverb plugin dependencies only" 
+	@echo "  reverb-deps     - Install reverb plugin dependencies only"
+	@echo "  echo-vst        - Build Echo VST3 plugin"
+	@echo "  echo-build-only - Build Echo VST3 plugin (no install)"
+	@echo "  echo-deps       - Install echo plugin dependencies only"
 	@echo "  install         - Build and install VST3 plugin to system"
 	@echo ""
 	@echo "🏗️ BUILD TARGETS:"
@@ -228,6 +260,7 @@ help:
 	@echo ""
 	@echo "📁 PACKAGES:"
 	@echo "  • dart_vst3_bridge/     - FFI bridge for any Dart VST3 plugin"
-	@echo "  • flutter_reverb/       - Pure Dart reverb VST3 implementation"
+	@echo "  • vsts/flutter_reverb/  - Pure Dart reverb VST3 implementation"
+	@echo "  • vsts/echo/            - Pure Dart echo VST3 implementation"
 	@echo "  • dart_vst_host/        - VST3 hosting for Dart applications"
 	@echo "  • dart_vst_graph/       - Audio graph system with VST routing"
