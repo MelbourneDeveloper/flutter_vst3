@@ -2,7 +2,7 @@
 
 Flutter/Dart framework for building VST® 3 plugins with Flutter UI and pure Dart audio processing.
 
-<img src="VST_Compatible_Logo_Steinberg.png" alt="VST Compatible" width="100">
+<img src="https://github.com/MelbourneDeveloper/flutter_vst3/raw/main/flutter_vst3/VST_Compatible_Logo_Steinberg.png" alt="VST Compatible" width="100">
 
 *VST® is a registered trademark of Steinberg Media Technologies GmbH, registered in Europe and other countries.*
 
