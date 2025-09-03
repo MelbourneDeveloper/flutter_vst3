@@ -108,8 +108,8 @@ private:
     IPlugView* flutterView_ = nullptr;
     
     void updateFlutterParameter(ParamID paramId, ParamValue value) {
-        // Send parameter update to Flutter UI
-        // This will be handled by the Flutter view implementation
+        // Send parameter update to Flutter UI view
+        // TODO: Implement parameter updates to UI controls
     }
 };
 
@@ -164,30 +164,22 @@ private:
     EditController* controller_;
     NSView* parentView_ = nullptr;
     NSView* flutterContainerView_ = nullptr;
+    NSSlider* delayKnob_ = nullptr;
+    NSSlider* feedbackKnob_ = nullptr;
+    NSSlider* mixKnob_ = nullptr;
     
     void createEmbeddedFlutterUI() {
 #ifdef __APPLE__
         if (!parentView_) return;
         
-        // Create a container view for the UI with bright background for testing
+        // Create a container view for the Echo UI with dark background
         NSRect frame = [parentView_ bounds];
         flutterContainerView_ = [[NSView alloc] initWithFrame:frame];
         [flutterContainerView_ setWantsLayer:YES];
+        flutterContainerView_.layer.backgroundColor = [[NSColor colorWithRed:0.06 green:0.06 blue:0.1 alpha:1.0] CGColor];
         
-        // Use bright red background to make sure it's visible
-        flutterContainerView_.layer.backgroundColor = [[NSColor redColor] CGColor];
-        
-        // Add a simple label to test visibility
-        NSTextField* testLabel = [[NSTextField alloc] initWithFrame:NSMakeRect(50, frame.size.height/2 - 25, frame.size.width - 100, 50)];
-        [testLabel setStringValue:@"ECHO PLUGIN UI TEST - RED BACKGROUND"];
-        [testLabel setAlignment:NSTextAlignmentCenter];
-        [testLabel setBordered:NO];
-        [testLabel setDrawsBackground:NO];
-        [testLabel setEditable:NO];
-        [testLabel setFont:[NSFont boldSystemFontOfSize:18]];
-        [testLabel setTextColor:[NSColor whiteColor]];
-        [testLabel setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
-        [flutterContainerView_ addSubview:testLabel];
+        // Create UI controls directly in the container
+        createNativeControls();
         
         [parentView_ addSubview:flutterContainerView_];
         
@@ -219,26 +211,24 @@ private:
         CGFloat knobSpacing = containerBounds.size.width / 4;
         CGFloat knobSize = 80;
         
-        // Delay Time knob
-        createKnobAtPosition(NSMakePoint(knobSpacing - knobSize/2, knobY), 
-                            knobSize, 
-                            @"DELAY", 
-                            0,
-                            [NSColor cyanColor]);
+        // Store knob controls for parameter updates
+        delayKnob_ = createKnobAtPosition(NSMakePoint(knobSpacing - knobSize/2, knobY), 
+                                        knobSize, 
+                                        @"DELAY", 
+                                        0,
+                                        [NSColor cyanColor]);
         
-        // Feedback knob  
-        createKnobAtPosition(NSMakePoint(2*knobSpacing - knobSize/2, knobY), 
-                            knobSize, 
-                            @"FEEDBACK", 
-                            1,
-                            [NSColor purpleColor]);
+        feedbackKnob_ = createKnobAtPosition(NSMakePoint(2*knobSpacing - knobSize/2, knobY), 
+                                           knobSize, 
+                                           @"FEEDBACK", 
+                                           1,
+                                           [NSColor purpleColor]);
         
-        // Mix knob
-        createKnobAtPosition(NSMakePoint(3*knobSpacing - knobSize/2, knobY), 
-                            knobSize, 
-                            @"MIX", 
-                            2,
-                            [NSColor orangeColor]);
+        mixKnob_ = createKnobAtPosition(NSMakePoint(3*knobSpacing - knobSize/2, knobY), 
+                                      knobSize, 
+                                      @"MIX", 
+                                      2,
+                                      [NSColor orangeColor]);
         
         // Bypass button - simple visual representation
         NSTextField* bypassLabel = [[NSTextField alloc] initWithFrame:NSMakeRect(containerBounds.size.width/2 - 70, 60, 140, 40)];
@@ -255,9 +245,19 @@ private:
 #endif
     }
     
-    void createKnobAtPosition(NSPoint position, CGFloat size, NSString* label, int paramID, NSColor* color) {
+    NSSlider* createKnobAtPosition(NSPoint position, CGFloat size, NSString* label, int paramID, NSColor* color) {
 #ifdef __APPLE__
-        // Knob circle
+        // Create interactive slider for the parameter
+        NSSlider* slider = [[NSSlider alloc] initWithFrame:NSMakeRect(position.x, position.y + size/3, size, 20)];
+        [slider setMinValue:0.0];
+        [slider setMaxValue:1.0];
+        [slider setDoubleValue:0.5]; // Default value
+        [slider setSliderType:NSSliderTypeLinear];
+        slider.tag = paramID;
+        // No target/action for now - we'll implement direct parameter updates
+        [flutterContainerView_ addSubview:slider];
+        
+        // Visual knob circle
         NSView* knobView = [[NSView alloc] initWithFrame:NSMakeRect(position.x, position.y, size, size)];
         [knobView setWantsLayer:YES];
         knobView.layer.backgroundColor = [[NSColor colorWithRed:0.16 green:0.16 blue:0.25 alpha:1.0] CGColor];
@@ -287,9 +287,29 @@ private:
         [valueField setFont:[NSFont boldSystemFontOfSize:14]];
         [valueField setTextColor:color];
         [flutterContainerView_ addSubview:valueField];
+        
+        return slider;
+#else
+        return nullptr;
 #endif
     }
     
+    
+    void updateParameterDisplay(int paramId, double value) {
+#ifdef __APPLE__
+        NSSlider* slider = nullptr;
+        switch (paramId) {
+            case 0: slider = delayKnob_; break;
+            case 1: slider = feedbackKnob_; break; 
+            case 2: slider = mixKnob_; break;
+            default: return;
+        }
+        
+        if (slider) {
+            [slider setDoubleValue:value];
+        }
+#endif
+    }
     
     void closeFlutterApp() {
         if (flutterContainerView_) {
