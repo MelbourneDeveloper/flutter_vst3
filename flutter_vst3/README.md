@@ -4,14 +4,13 @@ Flutter/Dart framework for building VST® 3 plugins with Flutter UI and pure Dar
 
 <img src="VST_Compatible_Logo_Steinberg.png" alt="VST Compatible" width="100">
 
-
-*VST® is a trademark of Steinberg Media Technologies GmbH, registered in Europe and other countries.*
+*VST® is a registered trademark of Steinberg Media Technologies GmbH, registered in Europe and other countries.*
 
 ## Overview
 
 `flutter_vst3` is a complete framework that enables you to build professional VST® 3 audio plugins using Flutter for the UI and Dart for real-time audio processing. The framework auto-generates all C++ VST® 3 boilerplate code - you write only Dart and Flutter.
 
-**For complete architecture documentation and examples, see the [main project README](https://github.com/your-org/flutter_vst3_toolkit).**
+**For complete architecture documentation and examples, see the [main project README](https://github.com/MelbourneDeveloper/flutter_vst3).**
 
 ## Features
 
@@ -71,8 +70,8 @@ class VST3Bridge {
 ## Examples
 
 See the complete example plugins in the main repository:
-- [Flutter Reverb](https://github.com/your-org/flutter_vst3_toolkit/tree/main/vsts/flutter_reverb) - Full reverb with Flutter UI
-- [Echo Plugin](https://github.com/your-org/flutter_vst3_toolkit/tree/main/vsts/echo) - Delay/echo with custom knobs
+- [Flutter Reverb](https://github.com/MelbourneDeveloper/flutter_vst3/tree/main/vsts/flutter_reverb) - Full reverb with Flutter UI
+- [Echo Plugin](https://github.com/MelbourneDeveloper/flutter_vst3/tree/main/vsts/echo) - Delay/echo with custom knobs
 
 ## Requirements
 
@@ -92,4 +91,4 @@ See: https://steinbergmedia.github.io/vst3_dev_portal/pages/VST+3+Licensing/Inde
 
 ## License
 
-See LICENSE file in the repository root.
+This project is licensed under the BSD 3-Clause License - see the [LICENSE](LICENSE) file for details.

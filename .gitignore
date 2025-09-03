@@ -2,7 +2,6 @@
 build/
 .dart_tool/
 .idea/
-.vscode/
 *.iml
 *.pyc
 __pycache__/

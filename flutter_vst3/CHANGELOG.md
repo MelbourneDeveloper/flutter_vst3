@@ -1,4 +1,4 @@
-## 1.0.0
+## 0.1.0
 
 * Initial release of flutter_vst3 framework
 * Complete framework for building VST® 3 plugins with Flutter UI and Dart audio processing

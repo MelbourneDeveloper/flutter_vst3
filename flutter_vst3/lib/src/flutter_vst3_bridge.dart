@@ -37,21 +37,7 @@ typedef DartDisposeNative = ffi.Void Function();
 
 /// Main FFI bridge between Dart VST3 plugins and C++ VST3 infrastructure
 class VST3Bridge {
-  static final _dylib = _loadLibrary();
   static VST3Processor? _processor;
-  
-  
-  static ffi.DynamicLibrary _loadLibrary() {
-    if (Platform.isMacOS) {
-      return ffi.DynamicLibrary.open('libdart_vst_host.dylib');
-    } else if (Platform.isLinux) {
-      return ffi.DynamicLibrary.open('libdart_vst_host.so');
-    } else if (Platform.isWindows) {
-      return ffi.DynamicLibrary.open('dart_vst_host.dll');
-    } else {
-      throw UnsupportedError('Unsupported platform');
-    }
-  }
 
   /// Register a Dart VST3 processor with the bridge
   /// This must be called before the VST3 plugin can process audio
