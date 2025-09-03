@@ -8,7 +8,6 @@ topics:
   - audio
   - plugins
   - flutter
-  - dsp
   - music
 platforms:
   macos:
