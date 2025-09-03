@@ -1,4 +1,4 @@
-/// Flutter VST® 3 - Framework for VST® 3 Plugin Development
+/// flutter_vst3 - Framework for VST® 3 Plugin Development
 /// 
 /// This package provides the complete framework for building VST® 3 plugins
 /// with Flutter UI and pure Dart audio processing. It bridges Dart/Flutter

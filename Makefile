@@ -1,4 +1,4 @@
-# Flutter VST® 3 Toolkit Makefile
+# flutter_vst3 Toolkit Makefile
 # Builds VST® 3 plugins with Flutter UI and pure Dart audio processing
 
 .PHONY: all build test clean clean-native clean-plugin help dart-deps flutter-deps reverb-vst install reverb reverb-build-only echo echo-vst echo-build-only echo-deps

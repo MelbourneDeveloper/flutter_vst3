@@ -1,4 +1,4 @@
-# Flutter VST® 3 Toolkit
+# flutter_vst3 Toolkit
 
 **Build professional VST® 3 plugins and hosts with Flutter UI and pure Dart audio processing.**
 
@@ -21,7 +21,7 @@ graph TB
         DAW4[Other VST® 3 Hosts]
     end
     
-    subgraph "Flutter VST® 3 Toolkit"
+    subgraph "flutter_vst3 Toolkit"
         subgraph "VST Creation"
             FR[flutter_reverb<br/>Flutter VST® Plugin]
             ECHO[echo<br/>Flutter VST® Plugin]
@@ -384,7 +384,7 @@ This toolkit is designed for professional audio development. Contributions shoul
 This project is not affiliated with, endorsed by, or sponsored by Steinberg Media Technologies GmbH.
 VST® is a trademark of Steinberg Media Technologies GmbH, registered in Europe and other countries.
 
-The Flutter VST® 3 Toolkit interfaces with the Steinberg VST® 3 SDK under the terms of the VST® 3 SDK License Agreement.
+The flutter_vst3 Toolkit interfaces with the Steinberg VST® 3 SDK under the terms of the VST® 3 SDK License Agreement.
 Users must comply with the Steinberg VST® 3 SDK License Agreement when distributing VST® 3 plugins.
 
 For more information about VST® 3 licensing:

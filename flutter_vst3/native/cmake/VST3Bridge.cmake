@@ -1,7 +1,7 @@
-# VST3Bridge.cmake - Shared CMake configuration for VST3 plugins using dart_vst3_bridge
+# VST3Bridge.cmake - Shared CMake configuration for VST® 3 plugins using flutter_vst3
 #
-# This file provides common functions and setup for building VST3 plugins that use
-# the dart_vst3_bridge package for Dart integration.
+# This file provides common functions and setup for building VST® 3 plugins that use
+# the flutter_vst3 framework for Flutter UI and Dart audio processing integration.
 
 # Function to create a VST3 plugin using the bridge
 function(add_dart_vst3_plugin target_name dart_file)
@@ -63,10 +63,10 @@ function(add_dart_vst3_plugin target_name dart_file)
         set(CMAKE_MESSAGE_LOG_LEVEL ${SAVED_CMAKE_MESSAGE_LOG_LEVEL})
     endif()
 
-    # Find dart_vst3_bridge native directory
-    # Since plugins are in vsts/ and bridge is in dart_vst3_bridge/native/
-    # The path from any vst plugin to bridge is ../../dart_vst3_bridge/native/
-    set(BRIDGE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../dart_vst3_bridge/native")
+    # Find flutter_vst3 native directory
+    # Since plugins are in vsts/ and bridge is in flutter_vst3/native/
+    # The path from any vst plugin to bridge is ../../flutter_vst3/native/
+    set(BRIDGE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../flutter_vst3/native")
     get_filename_component(BRIDGE_DIR "${BRIDGE_DIR}" ABSOLUTE)
     
     # Auto-generate C++ files from JSON metadata
