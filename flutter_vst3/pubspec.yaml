@@ -1,7 +1,8 @@
 name: flutter_vst3
 description: Flutter/Dart framework for building VST® 3 plugins with Flutter UI and pure Dart audio processing. Provides the interface between Dart audio processing code and the Steinberg VST® 3 SDK C++ infrastructure.
-version: 1.0.0
+version: 0.0.0
 publish_to: 'none'
+repository: https://github.com/MelbourneDeveloper/flutter_vst3
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
