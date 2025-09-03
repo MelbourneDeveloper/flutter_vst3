@@ -20,9 +20,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This a VST3 toolkit for Dart and Flutter. Use this toolkit to implement VSTs and VST hosts. This toolkit enables anyone to create VST3s with pure Dart and Flutter.
+This a Steinberg VST® 3 toolkit for Dart and Flutter. Use this toolkit to implement VST® plugins and VST® hosts. This toolkit enables anyone to create VST® 3 plugins with pure Dart and Flutter.
 
-As part of the toolkit, there is a VST3 host and audio graph system written in Dart with native C++ components. The project enables loading VST3 plugins into a customizable audio graph that can be controlled from Dart and Flutter applications.
+*VST® is a trademark of Steinberg Media Technologies GmbH.*
+
+The main project is flutter_vst3. Use this to create your own VST® 3 plugins with Flutter and Dart. There is also VST3 host and audio graph system written in Dart with native C++ components. The project enables loading VST3 plugins into a customizable audio graph that can be controlled from Dart and Flutter applications.
 
 Download Steinberg SDK here:
 https://www.steinberg.net/vst3sdk
@@ -30,9 +32,9 @@ curl -L -o vst3sdk.zip https://www.steinberg.net/vst3sdk
 
 ### Core Components
 
-1. **dart_vst_host** - High-level Dart bindings for VST3 plugin hosting with RAII resource management
-2. **dart_vst_graph** - Audio graph system allowing connection of VST plugins, mixers, splitters, and gain nodes
-3. **dart_vst3_bridge** - Shared C++ infrastructure for building VST3 plugins with Dart integration (auto-generates ALL C++ from Dart parameter definitions)
+1. **dart_vst_host** - High-level Dart bindings for VST® 3 plugin hosting with RAII resource management
+2. **dart_vst_graph** - Audio graph system allowing connection of VST® plugins, mixers, splitters, and gain nodes
+3. **flutter_vst3** - Complete framework for building VST® 3 plugins with Flutter UI and Dart audio processing (auto-generates ALL C++ from Dart parameter definitions)
 4. **flutter_ui** - Desktop Flutter application providing a GUI for the VST host
 5. **native/** - C++ implementation of VST3 host and audio graph using Steinberg VST3 SDK
 6. **vsts/** - Individual VST plugin packages, each builds its own .vst3 plugin (flutter_reverb, echo)
@@ -61,7 +63,7 @@ The audio graph supports:
 
 **Setup (First time):**
 ```bash
-./setup.sh  # Downloads VST3 SDK and builds native library automatically
+./setup.sh  # Downloads Steinberg VST® 3 SDK and builds native library automatically
 ```
 
 **Primary build targets using Makefile:**
@@ -149,9 +151,9 @@ cd vsts/echo/ && dart test
 
 **Important:** Tests require the native library to be built and present in the working directory. The test framework will fail with a clear error message if `libdart_vst_host.dylib` is missing.
 
-## VST3 Plugin Development (Zero C++ Required)
+## VST® 3 Plugin Development (Zero C++ Required)
 
-The dart_vst3_bridge now auto-generates ALL C++ boilerplate from Dart parameter definitions:
+The flutter_vst3 framework now auto-generates ALL C++ boilerplate from Dart parameter definitions:
 
 1. **Define parameters in Dart** with doc comments:
 ```dart

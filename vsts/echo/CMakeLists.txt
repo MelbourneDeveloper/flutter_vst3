@@ -3,8 +3,8 @@ project(echo_plugin
     VERSION 1.0.0
     LANGUAGES CXX)
 
-# Build the Echo VST3 plugin using dart_vst3_bridge
-# This plugin uses pure Dart audio processing via FFI bridge
+# Build the Echo VST® 3 plugin using flutter_vst3
+# This plugin uses pure Dart audio processing with Flutter UI via FFI bridge
 
 set(CMAKE_CXX_STANDARD 17)
 
@@ -19,10 +19,10 @@ else()
   add_compile_definitions(NDEBUG RELEASE)
 endif()
 
-# Include the VST3 bridge helper
-include(../../dart_vst3_bridge/native/cmake/VST3Bridge.cmake)
+# Include the flutter_vst3 CMake helper
+include(../../flutter_vst3/native/cmake/VST3Bridge.cmake)
 
-# Create the VST3 plugin using auto-generated code from Dart definitions
+# Create the VST® 3 plugin using auto-generated code from Dart definitions
 # The bridge will auto-generate all C++ files from lib/echo_parameters.dart
 # Metadata is read from plugin_metadata.json by the generator
 add_dart_vst3_plugin(echo echo_parameters.dart)

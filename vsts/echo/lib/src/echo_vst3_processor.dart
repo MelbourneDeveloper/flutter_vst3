@@ -1,4 +1,4 @@
-import 'package:dart_vst3_bridge/dart_vst3_bridge.dart';
+import 'package:flutter_vst3/flutter_vst3.dart';
 import 'echo_processor.dart';
 import 'echo_parameters.dart';
 

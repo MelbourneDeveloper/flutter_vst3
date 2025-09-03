@@ -1,4 +1,4 @@
-import 'package:dart_vst3_bridge/dart_vst3_bridge.dart';
+import 'package:flutter_vst3/flutter_vst3.dart';
 import 'echo_vst3_processor.dart';
 
 /// FFI bindings for the echo VST3 bridge - FAILS HARD if callbacks not registered

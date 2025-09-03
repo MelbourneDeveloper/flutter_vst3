@@ -3,8 +3,8 @@ project(flutter_reverb_plugin
     VERSION 1.0.0
     LANGUAGES CXX)
 
-# Build the Flutter Reverb VST3 plugin using dart_vst3_bridge
-# This plugin uses pure Dart audio processing via FFI bridge
+# Build the Flutter Reverb VST® 3 plugin using flutter_vst3
+# This plugin uses pure Dart audio processing with Flutter UI via FFI bridge
 
 set(CMAKE_CXX_STANDARD 17)
 
@@ -19,10 +19,10 @@ else()
   add_compile_definitions(NDEBUG RELEASE)
 endif()
 
-# Include the VST3 bridge helper
-include(../../dart_vst3_bridge/native/cmake/VST3Bridge.cmake)
+# Include the flutter_vst3 CMake helper
+include(../../flutter_vst3/native/cmake/VST3Bridge.cmake)
 
-# Create the VST3 plugin using auto-generated code from Dart definitions
+# Create the VST® 3 plugin using auto-generated code from Dart definitions
 # The bridge will auto-generate all C++ files from lib/src/reverb_parameters.dart
 add_dart_vst3_plugin(flutter_reverb lib/src/flutter_reverb_parameters.dart
     BUNDLE_IDENTIFIER "com.yourcompany.vst3.flutterreverb"

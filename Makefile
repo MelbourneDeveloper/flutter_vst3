@@ -1,44 +1,44 @@
-# Dart VST3 Toolkit Makefile
-# Builds VST3 plugins from pure Dart source code
+# flutter_vst3 Toolkit Makefile
+# Builds VST® 3 plugins with Flutter UI and pure Dart audio processing
 
 .PHONY: all build test clean clean-native clean-plugin help dart-deps flutter-deps reverb-vst install reverb reverb-build-only echo echo-vst echo-build-only echo-deps
 
-# Default target - build the Flutter Dart Reverb VST3
+# Default target - build the Flutter Reverb VST® 3 plugin
 all: reverb
 
 # Build all components (host, graph, and reverb VST)
 build: native plugin dart-deps flutter-deps reverb-vst
 
-# Build the Flutter Dart Reverb VST3 plugin
+# Build the Flutter Reverb VST® 3 plugin
 reverb: reverb-deps
-	@echo "Building Flutter Dart Reverb VST3 plugin..."
+	@echo "Building Flutter Reverb VST® 3 plugin..."
 	@mkdir -p vsts/flutter_reverb/build
 	@cd vsts/flutter_reverb/build && cmake -DCMAKE_BUILD_TYPE=Release .. && make -j$(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 1)
-	@echo "✅ VST3 plugin built: vsts/flutter_reverb/build/VST3/Release/flutter_reverb.vst3"
+	@echo "✅ VST® 3 plugin built: vsts/flutter_reverb/build/VST3/Release/flutter_reverb.vst3"
 
 # Alias for reverb
 reverb-vst: reverb
 
-# Build reverb VST3 without installing (explicit build-only target)
+# Build reverb VST® 3 without installing (explicit build-only target)
 reverb-build-only: reverb
 
-# Build the Echo VST3 plugin  
+# Build the Echo VST® 3 plugin  
 echo: echo-deps
-	@echo "Building Echo VST3 plugin..."
+	@echo "Building Echo VST® 3 plugin..."
 	@mkdir -p vsts/echo/build
 	@cd vsts/echo/build && cmake -DCMAKE_BUILD_TYPE=Release .. && make -j$(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 1)
-	@echo "✅ VST3 plugin built: vsts/echo/build/VST3/Release/echo.vst3"
+	@echo "✅ VST® 3 plugin built: vsts/echo/build/VST3/Release/echo.vst3"
 
 # Alias for echo
 echo-vst: echo
 
-# Build echo VST3 without installing (explicit build-only target)
+# Build echo VST® 3 without installing (explicit build-only target)
 echo-build-only: echo
 
 # Run all tests
 test: build
-	@echo "Running dart_vst3_bridge tests..."
-	cd dart_vst3_bridge && dart test || true
+	@echo "Running flutter_vst3 tests..."
+	cd flutter_vst3 && dart test || true
 	@echo "Running flutter_reverb tests..."
 	cd vsts/flutter_reverb && dart test || true
 	@echo "Running echo tests..."
@@ -90,9 +90,9 @@ native: clean-native
 	fi
 	@echo "Native libraries built and copied to required locations"
 
-# Build all VST3 plugins
+# Build all VST® 3 plugins
 plugin: native clean-plugin
-	@echo "Building all VST3 plugins..."
+	@echo "Building all VST® 3 plugins..."
 	@for plugin in vsts/*/; do \
 		if [ -f "$$plugin/CMakeLists.txt" ]; then \
 			echo "Building $$plugin"; \
@@ -102,25 +102,25 @@ plugin: native clean-plugin
 
 # Install Dart dependencies for all packages
 dart-deps:
-	@echo "Installing dart_vst3_bridge dependencies..."
+	@echo "Installing flutter_vst3 dependencies..."
 	@if [ -d "/workspace" ]; then \
-		dart pub get --directory=/workspace/dart_vst3_bridge; \
+		dart pub get --directory=/workspace/flutter_vst3; \
 		dart pub get --directory=/workspace/dart_vst_host; \
 		dart pub get --directory=/workspace/dart_vst_graph; \
 	else \
-		dart pub get --directory=dart_vst3_bridge; \
+		dart pub get --directory=flutter_vst3; \
 		dart pub get --directory=dart_vst_host; \
 		dart pub get --directory=dart_vst_graph; \
 	fi
 
 # Install reverb plugin dependencies
 reverb-deps:
-	@echo "Installing Flutter Dart Reverb dependencies..."
+	@echo "Installing Flutter Reverb dependencies..."
 	@if [ -d "/workspace" ]; then \
-		dart pub get --directory=/workspace/dart_vst3_bridge; \
+		dart pub get --directory=/workspace/flutter_vst3; \
 		dart pub get --directory=/workspace/vsts/flutter_reverb; \
 	else \
-		dart pub get --directory=dart_vst3_bridge; \
+		dart pub get --directory=flutter_vst3; \
 		dart pub get --directory=vsts/flutter_reverb; \
 	fi
 
@@ -128,10 +128,10 @@ reverb-deps:
 echo-deps:
 	@echo "Installing Echo plugin dependencies..."
 	@if [ -d "/workspace" ]; then \
-		dart pub get --directory=/workspace/dart_vst3_bridge; \
+		dart pub get --directory=/workspace/flutter_vst3; \
 		dart pub get --directory=/workspace/vsts/echo; \
 	else \
-		dart pub get --directory=dart_vst3_bridge; \
+		dart pub get --directory=flutter_vst3; \
 		dart pub get --directory=vsts/echo; \
 	fi
 
@@ -144,7 +144,7 @@ flutter-deps:
 		flutter pub get --directory=flutter_ui; \
 	fi
 
-# Install VST3 plugin to system location (macOS/Linux)
+# Install VST® 3 plugin to system location (macOS/Linux)
 install: reverb-vst
 	@echo "Installing flutter_reverb.vst3..."
 	@if [ "$$(uname)" = "Darwin" ]; then \

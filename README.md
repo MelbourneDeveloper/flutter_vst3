@@ -1,14 +1,18 @@
-# Dart VST3 Toolkit
+# flutter_vst3 Toolkit
 
-**A comprehensive toolkit for building VST3 plugins and hosts in pure Dart and Flutter.**
+**Build professional VST® 3 plugins and hosts with Flutter UI and pure Dart audio processing.**
 
-This is first and foremost a toolkit for creating VST3 plugins and VST hosts using Dart and Flutter. The toolkit enables developers to build professional audio plugins with modern UI frameworks while leveraging the power of the VST3 ecosystem.
+<img src="VST_Compatible_Logo_Steinberg.png" alt="VST Compatible" width="120">
+
+*VST® is a trademark of Steinberg Media Technologies GmbH, registered in Europe and other countries.*
+
+This toolkit enables developers to create professional VST® 3 audio plugins with modern Flutter UIs while leveraging the power of pure Dart for real-time audio processing. Zero C++ knowledge required.
 
 ## Architecture Overview
 
-### VST3 Plugin Architecture with Native Dart Executable
+### VST® 3 Plugin Architecture with Native Dart Executable
 
-The toolkit uses a unique architecture where Dart code is compiled to **native machine code executables** that communicate with the VST3 wrapper via IPC (Inter-Process Communication). This provides true native performance without requiring the Dart runtime in the DAW.
+The toolkit compiles Dart code to **native machine code executables** that communicate with the VST® 3 wrapper via IPC (Inter-Process Communication). This provides true native performance without requiring the Dart runtime in the DAW.
 
 ```mermaid
 graph TB
@@ -16,14 +20,14 @@ graph TB
         DAW1[Ableton Live]
         DAW2[FL Studio]
         DAW3[Reaper]
-        DAW4[Other VST3 Hosts]
+        DAW4[Other VST® 3 Hosts]
     end
     
-    subgraph "Dart VST3 Toolkit"
+    subgraph "flutter_vst3 Toolkit"
         subgraph "VST Creation"
-            FR[flutter_reverb<br/>Pure Dart VST]
-            ECHO[echo<br/>Pure Dart VST]
-            DVST[dart_vst3_bridge<br/>VST Building Tools]
+            FR[flutter_reverb<br/>Flutter VST® Plugin]
+            ECHO[echo<br/>Flutter VST® Plugin]
+            FVST[flutter_vst3<br/>VST® Building Framework]
         end
         
         subgraph "VST Hosting"
@@ -32,8 +36,8 @@ graph TB
         end
         
         subgraph "Native Bridge"
-            NL[native/<br/>C++ VST3 Implementation]
-            PL[VST3 Plugin Wrapper<br/>+ IPC to Dart Executable]
+            NL[native/<br/>C++ VST® 3 Implementation]
+            PL[VST® 3 Plugin Wrapper<br/>+ IPC to Dart Executable]
         end
         
         subgraph "UI Layer"
@@ -43,13 +47,13 @@ graph TB
     
     subgraph "External VSTs"
         VST1[TAL Reverb]
-        VST2[Other VST3s]
+        VST2[Other VST® 3 Plugins]
     end
     
     %% VST Creation Flow
-    FR --> DVST
-    ECHO --> DVST
-    DVST --> PL
+    FR --> FVST
+    ECHO --> FVST
+    FVST --> PL
     PL --> NL
     
     %% VST Hosting Flow  
@@ -70,7 +74,7 @@ graph TB
     
     style FR fill:#e1f5fe
     style ECHO fill:#e1f5fe
-    style DVST fill:#e1f5fe
+    style FVST fill:#e1f5fe
     style DVH fill:#fff3e0
     style DVG fill:#fff3e0
     style NL fill:#f3e5f5
@@ -82,15 +86,18 @@ graph TB
 ```mermaid
 sequenceDiagram
     participant DAW
-    participant VST3[VST3 Plugin (C++)]
+    participant VST3[VST® 3 Plugin (C++)]
     participant IPC[Binary IPC Protocol]
     participant DART[Dart Native Executable]
+    participant UI[Flutter UI Window]
     
-    Note over VST3,DART: Plugin Initialization
+    Note over VST3,UI: Plugin Initialization
     VST3->>DART: Spawn dart_processor executable
     DART->>VST3: ACK ready
+    VST3->>UI: Create Flutter window
+    UI->>DART: Connect parameter binding
     
-    Note over DAW,DART: Audio Processing
+    Note over DAW,UI: Audio Processing
     DAW->>VST3: Process audio buffer
     VST3->>IPC: Send binary audio data
     IPC->>DART: Deserialize & process
@@ -98,156 +105,74 @@ sequenceDiagram
     IPC->>VST3: Binary response
     VST3->>DAW: Return processed buffer
     
-    Note over VST3,DART: Parameter Changes
+    Note over DAW,UI: Parameter Changes (3-way binding)
     DAW->>VST3: Set parameter
     VST3->>DART: Send parameter update
-    DART->>VST3: ACK parameter change
+    DART->>UI: Notify UI of change
+    UI->>UI: Update knobs/sliders
 ```
 
 ## Package Overview
 
-### 🎛️ VST3 Plugin Creation
+### 🎛️ VST® 3 Plugin Creation
 
-**Primary Purpose: Build actual VST3 plugins using Dart/Flutter that compile to .vst3 bundles**
+**Primary Purpose: Build VST® 3 plugins with Flutter UIs that compile to .vst3 bundles**
 
-- **`dart_vst3_bridge`** - Auto-generates all C++ VST3 boilerplate from Dart parameter definitions
-- **`vsts/flutter_reverb`** - Complete VST3 reverb plugin implementation in pure Dart  
-- **`vsts/echo`** - VST3 echo/delay plugin implementation in pure Dart
-- **Native Executable Compilation** - Dart code compiles to native machine code executables (no runtime required)
+- **`flutter_vst3`** - Complete framework that auto-generates all C++ VST® 3 boilerplate from Dart
+- **`vsts/flutter_reverb`** - Example VST® 3 reverb plugin with Flutter UI  
+- **`vsts/echo`** - Example VST® 3 echo/delay plugin with Flutter UI
+- **Native Executable Compilation** - Dart compiles to native machine code (no runtime required)
 
-### 🎧 VST Hosting Packages  
+### 🎧 VST® Hosting Packages  
 
-**Primary Purpose: Load and control existing VST3 plugins from Dart applications**
+**Primary Purpose: Load and control existing VST® 3 plugins from Dart applications**
 
-- **`dart_vst_host`** - High-level API for loading and controlling VST3 plugins
-- **`dart_vst_graph`** - Audio graph system for routing and mixing VST plugins with built-in nodes (mixers, splitters, gain)
+- **`dart_vst_host`** - High-level API for loading and controlling VST® 3 plugins
+- **`dart_vst_graph`** - Audio graph system for routing and mixing VST® plugins
 
 ### 🔧 Native Infrastructure
 
-- **`native/`** - C++ implementation using Steinberg VST3 SDK
-- **`plugin/`** - VST3 plugin wrapper that hosts the Dart audio graph
+- **`native/`** - C++ implementation using Steinberg VST® 3 SDK
+- **`plugin/`** - VST® 3 plugin wrapper that hosts the Dart audio graph
 - **`flutter_ui/`** - Desktop Flutter application for interactive testing
 
-## Use Cases
+## Key Features
 
-### 1. Creating VST3 Plugins in Dart/Flutter  
+### Flutter UI + Dart Audio Processing
+- ✅ **Beautiful Flutter UIs** - Modern, reactive plugin interfaces
+- ✅ **Pure Dart DSP** - Write audio algorithms in familiar Dart syntax
+- ✅ **Hot Reload** - Instant UI updates during development
+- ✅ **3-Way Parameter Binding** - DAW ↔ Flutter UI ↔ C++ parameters stay in sync
+- ✅ **Zero C++ Required** - Framework auto-generates all VST® 3 boilerplate
 
-```mermaid
-sequenceDiagram
-    participant Dev as Developer
-    participant Dart as Dart Plugin Code
-    participant CMake as CMake Build
-    participant EXE as Native Executable
-    participant VST3 as VST3 Wrapper
-    participant DAW as DAW
-
-    Dev->>Dart: Write audio processing in pure Dart
-    Dev->>CMake: Run build (make reverb-vst)
-    CMake->>EXE: dart compile exe → native binary
-    CMake->>VST3: Generate C++ wrapper code
-    CMake->>VST3: Bundle executable + wrapper
-    DAW->>VST3: Load .vst3 plugin
-    VST3->>EXE: Spawn Dart process
-    DAW->>VST3: Process audio buffer
-    VST3->>EXE: Send via binary IPC
-    EXE->>VST3: Return processed audio
-    VST3->>DAW: Output to DAW
-```
-
-**Key Benefits:**
-- ✅ **Zero Dart Runtime** - Compiles to native machine code
+### Native Performance
+- ✅ **Native Machine Code** - Dart compiles to native executables
+- ✅ **No Runtime Overhead** - No Dart VM or JIT in production
 - ✅ **Process Isolation** - Plugin crashes won't affect DAW
-- ✅ **Cross-Platform** - Works on Windows/macOS/Linux  
-- ✅ **Small Binary Size** - No VM or runtime overhead
-- ✅ **Auto-Generated C++** - CMake generates all VST3 boilerplate from Dart
+- ✅ **Small Binary Size** - Minimal footprint in DAW
 
-### 2. Building VST Host Applications
-
-```mermaid
-sequenceDiagram
-    participant App as Your Dart App
-    participant DVH as dart_vst_host
-    participant DVG as dart_vst_graph
-    participant VST as External VST3
-
-    App->>DVH: Load VST3 plugin
-    App->>DVG: Create audio graph
-    DVG->>VST: Route audio through plugin
-    VST->>DVG: Return processed audio
-    DVG->>App: Mixed output
-```
-
-### 3. DAW Integration Examples
-
-#### Ableton Live Workflow
-```mermaid
-graph LR
-    subgraph "Ableton Live"
-        TR1[Audio Track 1]
-        TR2[Audio Track 2] 
-        TR3[Return Track]
-    end
-    
-    subgraph "Dart VST Plugin"
-        UI[Flutter UI]
-        PROC[Dart Audio Processor]
-    end
-    
-    TR1 --> PROC
-    TR2 --> PROC
-    PROC --> TR3
-    PROC <--> UI
-```
-
-#### FL Studio Integration  
-```mermaid
-graph TB
-    subgraph "FL Studio Mixer"
-        CH1[Channel 1]
-        CH2[Channel 2]
-        SEND[Send Channel]
-    end
-    
-    subgraph "Your Dart VST"
-        DART[Dart Reverb Plugin]
-        FLU[Flutter Control Panel]
-    end
-    
-    CH1 --> DART
-    CH2 --> DART
-    DART --> SEND
-    FLU <--> DART
-```
+### Cross-Platform Support
+- ✅ **macOS** - Universal binaries (Intel + Apple Silicon)
+- ✅ **Windows** - Native Windows VST® 3 support
+- ✅ **Linux** - Full Linux VST® 3 support
 
 ## Quick Start
 
 ### Prerequisites
 
 ```bash
-# Set VST3 SDK path
+# Download Steinberg VST® 3 SDK
+./setup.sh  # Automatically downloads SDK and builds native libraries
+
+# Or manually set VST3_SDK_DIR
 export VST3_SDK_DIR=/path/to/vst3sdk
-
-# Install dependencies
-flutter pub get
-dart pub get
 ```
 
-### Building Your First VST Plugin
+### Building Your First VST® Plugin
 
-1. **Study the reference implementations:**
+1. **Build the example plugins:**
 ```bash
-# Flutter Reverb plugin
-cd vsts/flutter_reverb/
-dart run example/demo.dart
-
-# Echo plugin  
-cd vsts/echo/
-dart run example/demo.dart
-```
-
-2. **Build using the Makefile:**
-```bash
-# Build the Flutter Reverb VST3 (default)
+# Build Flutter Reverb VST® 3 (default)
 make
 
 # Build specific plugins:
@@ -258,14 +183,14 @@ make echo-vst         # Build echo.vst3
 make install
 ```
 
-The build process automatically:
-1. Compiles your Dart code to a native executable (`dart compile exe`)
-2. Generates all C++ VST3 wrapper code from your Dart parameter definitions
-3. Bundles everything into a .vst3 plugin ready for any DAW
+2. **Test in your DAW:**
+- macOS: `~/Library/Audio/Plug-Ins/VST3/`
+- Windows: `C:\Program Files\Common Files\VST3\`
+- Linux: `~/.vst3/`
 
-### Creating Your Own VST Plugin
+### Creating Your Own VST® Plugin
 
-1. **Define your parameters with doc comments:**
+1. **Define parameters with Flutter UI bindings:**
 ```dart
 // lib/src/my_parameters.dart
 class MyParameters {
@@ -277,7 +202,7 @@ class MyParameters {
 }
 ```
 
-2. **Create your processor:**
+2. **Implement your audio processor:**
 ```dart
 // lib/src/my_processor.dart
 class MyProcessor {
@@ -292,26 +217,67 @@ class MyProcessor {
 }
 ```
 
-3. **Create the executable entry point:**
+3. **Create Flutter UI with parameter binding:**
 ```dart
-// lib/my_plugin_processor_exe.dart
-import 'dart:io';
-import 'dart:typed_data';
-import 'src/my_processor.dart';
-import 'src/my_parameters.dart';
+// lib/my_ui_main.dart
+import 'package:flutter/material.dart';
+import 'package:flutter_vst3/flutter_vst3.dart';
 
-void main() async {
-  final processor = MyProcessor();
+void main() {
+  runApp(MyPluginUI());
+}
+
+class MyPluginUI extends StatefulWidget {
+  @override
+  _MyPluginUIState createState() => _MyPluginUIState();
+}
+
+class _MyPluginUIState extends State<MyPluginUI> {
   final parameters = MyParameters();
   
-  // Binary IPC protocol implementation
-  // (See echo_processor_exe.dart for full example)
+  @override
+  void initState() {
+    super.initState();
+    // Register for DAW parameter changes
+    VST3Bridge.registerParameterChangeCallback(_onParameterChanged);
+  }
+  
+  void _onParameterChanged(int paramId, double value) {
+    setState(() {
+      parameters.setParameter(paramId, value);
+    });
+  }
+  
+  void _updateParameter(int paramId, double value) {
+    setState(() {
+      parameters.setParameter(paramId, value);
+    });
+    // Send to VST host/DAW
+    VST3Bridge.sendParameterToHost(paramId, value);
+  }
+  
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      home: Scaffold(
+        body: Column(
+          children: [
+            Text('My VST Plugin'),
+            Slider(
+              value: parameters.gain,
+              onChanged: (v) => _updateParameter(0, v),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 ```
 
 4. **CMake automatically generates everything else!**
 
-### Building a VST Host Application
+### Building a VST® Host Application
 
 ```dart
 import 'package:dart_vst_host/dart_vst_host.dart';
@@ -322,8 +288,8 @@ void main() async {
   final host = VstHost();
   await host.initialize();
   
-  // Load VST plugin (including your Dart VSTs!)
-  final plugin = await host.loadPlugin('FlutterDartReverb.vst3');
+  // Load VST plugin (including Flutter-based VSTs!)
+  final plugin = await host.loadPlugin('flutter_reverb.vst3');
   
   // Create audio graph
   final graph = VstGraph();
@@ -341,127 +307,95 @@ void main() async {
 ## Project Structure
 
 ```
-dart_vst3_toolkit/
-├── dart_vst3_bridge/       # Generic FFI bridge for ANY Dart VST3 plugin
-├── flutter_reverb/         # Example reverb VST3 implementation (uses bridge)
-├── dart_vst_host/          # VST3 hosting API for Dart applications
-├── dart_vst_graph/         # Audio graph system with VST routing
-├── native/                 # C++ VST3 SDK integration + FFI bridge
-├── plugin/                 # VST3 plugin wrapper (compiles Dart to .vst3)
-├── flutter_ui/             # GUI host application
-└── vst_plugins/            # External VST3 plugins for testing
+flutter_vst3_toolkit/
+├── flutter_vst3/           # Framework for building VST® 3 plugins with Flutter
+│   ├── lib/
+│   │   ├── flutter_vst3.dart
+│   │   └── src/
+│   │       ├── flutter_vst3_bridge.dart    # DAW ↔ Flutter binding
+│   │       ├── flutter_vst3_callbacks.dart # FFI callbacks
+│   │       └── flutter_vst3_parameters.dart # Parameter management
+│   └── native/             # C++ templates and CMake helpers
+├── vsts/
+│   ├── flutter_reverb/     # Example reverb with Flutter UI
+│   └── echo/              # Example echo with Flutter UI
+├── dart_vst_host/         # VST® 3 hosting API for Dart
+├── dart_vst_graph/        # Audio graph system
+├── native/                # C++ VST® 3 SDK integration
+├── flutter_ui/            # Desktop host application
+└── Makefile              # Build automation
 ```
 
 ## Development Workflow
 
-### 1. VST Plugin Development
-1. Implement audio processing in `flutter_reverb/lib/src/reverb_processor.dart`
-2. Design UI in `flutter_reverb/lib/src/reverb_ui.dart`  
-3. Test with Flutter: `flutter run`
-4. Build VST3: `make -C plugin/build`
-5. Test in DAW
+### VST® Plugin Development
+1. Design UI in Flutter with hot reload
+2. Implement audio processing in pure Dart
+3. Test with `flutter run`
+4. Build VST® 3: `make echo-vst`
+5. Load in DAW and test
 
-### 2. Host Application Development
-1. Build native library: `make -C native/build`
-2. Implement in Dart using `dart_vst_host` and `dart_vst_graph`
-3. Test with Flutter UI: `flutter run -d desktop`
+### Parameter Binding System
+The framework provides automatic 3-way parameter binding:
+- **DAW → Flutter UI**: Parameter changes in DAW update Flutter UI
+- **Flutter UI → DAW**: UI interactions update DAW parameters
+- **Flutter UI → Processor**: UI changes update audio processing
+
+## Examples in Production
+
+### Flutter Reverb Plugin
+- Full reverb algorithm in pure Dart
+- Beautiful Flutter UI with animated controls
+- Real-time parameter updates
+- Ships as standard .vst3 bundle
+
+### Echo Plugin
+- Delay/echo effect with feedback
+- Flutter UI with custom knob widgets
+- Bypass control
+- Parameter automation support
 
 ## Testing
 
-**All packages:**
 ```bash
-# Build native dependencies first
-cd native/ && mkdir build && cd build && cmake .. && make
+# Run all tests
+make test
 
-# Test Dart packages
-cd dart_vst_host/ && dart test
-cd dart_vst_graph/ && dart test
-cd flutter_reverb/ && dart test
-```
+# Test individual packages
+cd flutter_vst3 && dart test
+cd vsts/echo && dart test
+cd dart_vst_host && dart test
+cd dart_vst_graph && dart test
 
-**Integration testing:**
-```bash
-cd flutter_ui/
-flutter run  # Interactive testing with GUI
-```
-
-## Key Features
-
-### For VST Plugin Creators
-- ✅ Pure Dart/Flutter audio processing
-- ✅ Modern Flutter UI framework
-- ✅ Hot reload during development
-- ✅ Cross-platform VST3 output
-- ✅ Parameter automation
-- ✅ State persistence
-
-### For VST Host Developers  
-- ✅ Load any VST3 plugin
-- ✅ Flexible audio routing
-- ✅ Built-in mixing nodes
-- ✅ Real-time parameter control
-- ✅ RAII resource management
-- ✅ Flutter UI integration
-
-### Platform Support
-- ✅ **macOS**: `.dylib` + `.vst3` bundle
-- ✅ **Linux**: `.so` library
-- ✅ **Windows**: `.dll` library *(coming soon)*
-
-## Examples in the Wild
-
-### Creating Reverb VST
-```dart
-// flutter_reverb/lib/src/reverb_processor.dart
-class ReverbProcessor {
-  void processStereo(List<double> inputL, List<double> inputR,
-                    List<double> outputL, List<double> outputR) {
-    // Your reverb algorithm here
-    for (int i = 0; i < inputL.length; i++) {
-      outputL[i] = inputL[i] * wetLevel + reverbL * dryLevel;
-      outputR[i] = inputR[i] * wetLevel + reverbR * dryLevel;
-    }
-  }
-}
-```
-
-### Loading VSTs in Your App
-```dart
-// Using dart_vst_host
-final plugin = await host.loadPlugin('/path/to/TAL-Reverb-4.vst3');
-plugin.setParameter(0, 0.75); // Set room size
-final processedAudio = plugin.processAudio(inputBuffer);
-```
-
-### Building Audio Graphs
-```dart  
-// Using dart_vst_graph
-final graph = VstGraph();
-final reverb = graph.addVstNode(reverbPlugin);
-final delay = graph.addVstNode(delayPlugin);
-final mixer = graph.addMixerNode();
-
-// Chain: input -> reverb -> delay -> mixer -> output
-graph.connect(graph.input, reverb.input);
-graph.connect(reverb.output, delay.input);
-graph.connect(delay.output, mixer.input1);
-graph.connect(mixer.output, graph.output);
+# Interactive testing with GUI
+cd flutter_ui && flutter run
 ```
 
 ## Contributing
 
 This toolkit is designed for professional audio development. Contributions should maintain:
 
-- **No duplication**: Use existing components, don't recreate them
-- **No placeholders**: Implementation must be complete and functional  
+- **No duplication**: Use existing components
+- **No placeholders**: Implementation must be complete  
 - **Pure FP style**: Immutable data, pure functions
-- **Comprehensive testing**: Tests must fail hard, no warnings
+- **Flutter-first**: Leverage Flutter's UI capabilities
 - **Clear documentation**: All public APIs documented
+
+## Legal Notice
+
+This project is not affiliated with, endorsed by, or sponsored by Steinberg Media Technologies GmbH.
+VST® is a trademark of Steinberg Media Technologies GmbH, registered in Europe and other countries.
+
+The flutter_vst3 Toolkit interfaces with the Steinberg VST® 3 SDK under the terms of the VST® 3 SDK License Agreement.
+Users must comply with the Steinberg VST® 3 SDK License Agreement when distributing VST® 3 plugins.
+
+For more information about VST® 3 licensing:
+https://steinbergmedia.github.io/vst3_dev_portal/pages/VST+3+Licensing/Index.html
 
 ## License
 
-This project uses the Steinberg VST3 SDK. Please review the VST3 License Agreement before commercial use.
+See LICENSE file. Commercial use requires compliance with Steinberg VST® 3 licensing terms.
 
 ---
 
-**Ready to build the next generation of audio plugins with Dart and Flutter? Start with `flutter_reverb` and explore the examples!**
+**Ready to build the next generation of audio plugins with Flutter and Dart? Start with the examples and unleash your creativity!**
