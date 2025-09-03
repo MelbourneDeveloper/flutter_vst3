@@ -23,6 +23,7 @@ using namespace Steinberg::Vst;
 // Forward declaration
 IPlugView* createFlutterView(EditController* controller);
 
+
 // Controller for the {{PLUGIN_NAME}} plugin with Flutter UI
 class {{PLUGIN_CLASS_NAME}}Controller : public EditController {
 public:
@@ -108,8 +109,7 @@ private:
     IPlugView* flutterView_ = nullptr;
     
     void updateFlutterParameter(ParamID paramId, ParamValue value) {
-        // Send parameter update to Flutter UI view
-        // TODO: Implement parameter updates to UI controls
+        // TODO: Update Flutter UI controls when parameters change externally
     }
 };
 
@@ -159,6 +159,7 @@ public:
         return kResultFalse;
 #endif
     }
+
 
 private:
     EditController* controller_;
@@ -211,24 +212,27 @@ private:
         CGFloat knobSpacing = containerBounds.size.width / 4;
         CGFloat knobSize = 80;
         
-        // Store knob controls for parameter updates
+        // Create knob controls - DISPLAY ONLY, no event handling
         delayKnob_ = createKnobAtPosition(NSMakePoint(knobSpacing - knobSize/2, knobY), 
                                         knobSize, 
                                         @"DELAY", 
                                         0,
-                                        [NSColor cyanColor]);
+                                        [NSColor cyanColor],
+                                        0.5);  // Default from JSON
         
         feedbackKnob_ = createKnobAtPosition(NSMakePoint(2*knobSpacing - knobSize/2, knobY), 
                                            knobSize, 
                                            @"FEEDBACK", 
                                            1,
-                                           [NSColor purpleColor]);
+                                           [NSColor purpleColor],
+                                           0.3);  // Default from JSON
         
         mixKnob_ = createKnobAtPosition(NSMakePoint(3*knobSpacing - knobSize/2, knobY), 
                                       knobSize, 
                                       @"MIX", 
                                       2,
-                                      [NSColor orangeColor]);
+                                      [NSColor orangeColor],
+                                      0.5);  // Default from JSON
         
         // Bypass button - simple visual representation
         NSTextField* bypassLabel = [[NSTextField alloc] initWithFrame:NSMakeRect(containerBounds.size.width/2 - 70, 60, 140, 40)];
@@ -245,16 +249,18 @@ private:
 #endif
     }
     
-    NSSlider* createKnobAtPosition(NSPoint position, CGFloat size, NSString* label, int paramID, NSColor* color) {
+    NSSlider* createKnobAtPosition(NSPoint position, CGFloat size, NSString* label, int paramID, NSColor* color, double paramValue = 0.5) {
 #ifdef __APPLE__
         // Create interactive slider for the parameter
         NSSlider* slider = [[NSSlider alloc] initWithFrame:NSMakeRect(position.x, position.y + size/3, size, 20)];
         [slider setMinValue:0.0];
         [slider setMaxValue:1.0];
-        [slider setDoubleValue:0.5]; // Default value
+        [slider setDoubleValue:paramValue]; // Use actual parameter value
         [slider setSliderType:NSSliderTypeLinear];
         slider.tag = paramID;
-        // No target/action for now - we'll implement direct parameter updates
+        
+        // NO target/action - UI is DISPLAY ONLY, parameters controlled by host
+        
         [flutterContainerView_ addSubview:slider];
         
         // Visual knob circle
@@ -277,9 +283,10 @@ private:
         [labelField setTextColor:[NSColor lightGrayColor]];
         [flutterContainerView_ addSubview:labelField];
         
-        // Value display
+        // Value display - show actual parameter percentage
         NSTextField* valueField = [[NSTextField alloc] initWithFrame:NSMakeRect(position.x + size/4, position.y + size/3, size/2, 20)];
-        [valueField setStringValue:@"50"];
+        NSString* valueString = [NSString stringWithFormat:@"%.0f", paramValue * 100];
+        [valueField setStringValue:valueString];
         [valueField setAlignment:NSTextAlignmentCenter];
         [valueField setBordered:NO];
         [valueField setDrawsBackground:NO];
@@ -291,23 +298,6 @@ private:
         return slider;
 #else
         return nullptr;
-#endif
-    }
-    
-    
-    void updateParameterDisplay(int paramId, double value) {
-#ifdef __APPLE__
-        NSSlider* slider = nullptr;
-        switch (paramId) {
-            case 0: slider = delayKnob_; break;
-            case 1: slider = feedbackKnob_; break; 
-            case 2: slider = mixKnob_; break;
-            default: return;
-        }
-        
-        if (slider) {
-            [slider setDoubleValue:value];
-        }
 #endif
     }
     
