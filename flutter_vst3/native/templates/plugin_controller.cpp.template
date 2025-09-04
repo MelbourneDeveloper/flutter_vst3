@@ -12,6 +12,11 @@
 using namespace Steinberg;
 using namespace Steinberg::Vst;
 
+// Forward declare embedded Flutter view factory
+namespace Steinberg::Vst {
+    IPlugView* createEmbeddedFlutterView();
+}
+
 // Controller for the {{PLUGIN_NAME}} plugin
 class {{PLUGIN_CLASS_NAME}}Controller : public EditController {
 public:
@@ -74,9 +79,7 @@ public:
     // Create view (UI) for the plugin - integrates with Flutter UI
     IPlugView* PLUGIN_API createView(FIDString name) override {
         if (strcmp(name, ViewType::kEditor) == 0) {
-            // TODO: Return Flutter-based UI view
-            // For now, return nullptr to use generic host UI
-            return nullptr;
+            return createEmbeddedFlutterView();
         }
         return nullptr;
     }

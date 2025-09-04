@@ -23,6 +23,9 @@ endif()
 include(../../flutter_vst3/native/cmake/VST3Bridge.cmake)
 
 # Create the VST® 3 plugin using auto-generated code from Dart definitions
-# The bridge will auto-generate all C++ files from lib/echo_parameters.dart
-# Metadata is read from plugin_metadata.json by the generator
-add_dart_vst3_plugin(echo echo_parameters.dart)
+# The bridge will auto-generate all C++ files from lib/src/echo_parameters.dart
+add_dart_vst3_plugin(echo lib/src/echo_parameters.dart
+    BUNDLE_IDENTIFIER "com.yourcompany.vst3.echo"
+    COMPANY_NAME "Your Company"
+    PLUGIN_NAME "Echo"
+)

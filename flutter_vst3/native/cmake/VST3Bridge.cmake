@@ -171,6 +171,8 @@ function(add_dart_vst3_plugin target_name dart_file)
     # Bridge components (view and native processor if available)
     set(bridge_sources_no_factory
         ${BRIDGE_DIR}/src/plugin_view.cpp
+        ${BRIDGE_DIR}/src/embedded_flutter_view.cpp
+        ${BRIDGE_DIR}/src/embedded_flutter_view.mm
     )
     
     if(EXISTS ${NATIVE_PROCESSOR_FILE})
@@ -234,6 +236,18 @@ function(add_dart_vst3_plugin target_name dart_file)
             sdk
             ${PLUGIN_LINK_LIBRARIES}
     )
+    
+    # Link macOS frameworks for embedded views
+    if(SMTG_MAC)
+        find_library(FOUNDATION_FRAMEWORK Foundation)
+        find_library(APPKIT_FRAMEWORK AppKit)
+        target_link_libraries(${target_name} PRIVATE ${FOUNDATION_FRAMEWORK} ${APPKIT_FRAMEWORK})
+        
+        find_library(FLUTTER_FRAMEWORK FlutterMacOS PATHS "/usr/local/flutter" PATH_SUFFIXES "bin/cache/artifacts/engine/darwin-x64")
+        if(FLUTTER_FRAMEWORK)
+            target_link_libraries(${target_name} PRIVATE ${FLUTTER_FRAMEWORK})
+        endif()
+    endif()
 
     # Set bundle properties on macOS
     if(SMTG_MAC)
