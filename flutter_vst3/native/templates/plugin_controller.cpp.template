@@ -32,6 +32,10 @@ public:
         return kResultTrue;
     }
 
+    int32 PLUGIN_API getParameterCount() override {
+        return {{PARAMETER_COUNT}};
+    }
+
     tresult PLUGIN_API setComponentState(IBStream* state) override {
         if (!state) return kResultFalse;
 
