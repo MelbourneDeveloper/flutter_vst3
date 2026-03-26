@@ -42,7 +42,16 @@ class VST3Bridge {
   /// This must be called before the VST3 plugin can process audio
   static void registerProcessor(VST3Processor processor) {
     _processor = processor;
-    print('Dart VST3 processor registered locally (callbacks not yet implemented in FFI layer)');
+    
+    // Register FFI callbacks for same-process execution
+    _registerFFICallbacks();
+  }
+  
+  /// Register all FFI callbacks with C++ layer for same-process execution
+  static void _registerFFICallbacks() {
+    // Implementation would register native callbacks
+    // This enables direct FFI communication without separate process
+    throw UnimplementedError('FFI callback registration requires native implementation');
   }
 
   /// Initialize the processor

@@ -108,12 +108,8 @@ void registerVST3Callbacks({required String pluginId}) {
 
     // Cleanup
     calloc.free(callbacks);
-    print('VST3 callbacks successfully registered for $pluginId');
     
-  } catch (e, stackTrace) {
-    print('FATAL VST3 BRIDGE ERROR: Failed to register callbacks for $pluginId');
-    print('Error: $e');
-    print('Stack trace: $stackTrace');
+  } catch (e) {
     throw StateError('VST3 bridge initialization failed: $e');
   }
 }

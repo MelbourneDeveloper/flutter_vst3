@@ -145,7 +145,6 @@ abstract class VST3AudioProcessor {
   VST3AudioProcessor();
   
   /// Get parameter value for audio processing
-  /// This reads from shared memory in SAME process - no IPC!
   @pragma('vm:prefer-inline')
   double getParameter(int id) {
     return _ParameterBridgeFFI.getForAudio(id);

@@ -83,6 +83,7 @@ function(add_dart_vst3_plugin target_name dart_file)
     endif()
     
     # COMPILE DART TO NATIVE EXECUTABLE - NOT AOT!
+    # Use the combined UI+processor executable that contains BOTH Flutter UI and audio processing
     set(DART_EXE_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/lib/${target_name}_processor_exe.dart")
     
     if(EXISTS ${DART_EXE_SOURCE})
@@ -168,10 +169,9 @@ function(add_dart_vst3_plugin target_name dart_file)
     # Check if native C++ processor exists (transpiled from Dart)
     set(NATIVE_PROCESSOR_FILE "${CMAKE_CURRENT_BINARY_DIR}/generated/${target_name}_processor_native.cpp")
     
-    # Bridge components (view and native processor if available)
+    # Bridge components - SIMPLE launcher only
     set(bridge_sources_no_factory
         ${BRIDGE_DIR}/src/plugin_view.cpp
-        ${BRIDGE_DIR}/src/embedded_flutter_view.cpp
         ${BRIDGE_DIR}/src/embedded_flutter_view.mm
     )
     

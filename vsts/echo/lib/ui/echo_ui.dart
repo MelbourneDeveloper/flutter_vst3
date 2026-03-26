@@ -60,7 +60,6 @@ class _EchoUIState extends State<EchoUI> {
           Slider(
             value: value,
             onChanged: (newValue) {
-              // Update parameter in SAME process - no IPC!
               _binding.setParameter(paramId, newValue);
             },
             activeColor: Theme.of(context).colorScheme.primary,
