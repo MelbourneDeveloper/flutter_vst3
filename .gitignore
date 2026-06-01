@@ -17,3 +17,6 @@ vst3sdk/
 *.wav
 
 vst_plugins/
+
+
+.deslop-cache/
