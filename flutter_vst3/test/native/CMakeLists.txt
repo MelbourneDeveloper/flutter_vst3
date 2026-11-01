@@ -29,15 +29,6 @@ add_executable(plugin_host_test plugin_host_test.cpp)
 target_link_libraries(plugin_host_test PRIVATE sdk_hosting sdk_common pluginterfaces base)
 target_include_directories(plugin_host_test PRIVATE ${VST3_SDK_DIR})
 
-if(UNIX AND NOT APPLE)
-    find_package(X11 REQUIRED)
-    add_executable(editor_host_test editor_host_test.cpp
-        ${VST3_SDK_DIR}/public.sdk/source/vst/hosting/module.cpp
-        ${VST3_SDK_DIR}/public.sdk/source/vst/hosting/module_linux.cpp)
-    target_include_directories(editor_host_test PRIVATE ${VST3_SDK_DIR})
-    target_link_libraries(editor_host_test PRIVATE sdk_hosting sdk_common pluginterfaces base X11::X11 ${CMAKE_DL_LIBS} stdc++fs)
-endif()
-
 # The SDK leaves these out of sdk_hosting, for hosts to add themselves.
 set(hosting_dir ${VST3_SDK_DIR}/public.sdk/source/vst/hosting)
 target_sources(plugin_host_test PRIVATE
@@ -53,4 +44,19 @@ elseif(APPLE)
 else()
     target_sources(plugin_host_test PRIVATE ${hosting_dir}/module_linux.cpp)
     target_link_libraries(plugin_host_test PRIVATE ${CMAKE_DL_LIBS} stdc++fs)
+endif()
+
+add_executable(editor_host_test editor_host_test.cpp ${hosting_dir}/module.cpp)
+target_include_directories(editor_host_test PRIVATE ${VST3_SDK_DIR})
+target_link_libraries(editor_host_test PRIVATE sdk_hosting sdk_common pluginterfaces base)
+if(WIN32)
+    target_sources(editor_host_test PRIVATE editor_host_platform_win.cpp ${hosting_dir}/module_win32.cpp)
+elseif(APPLE)
+    target_sources(editor_host_test PRIVATE editor_host_platform_mac.mm ${hosting_dir}/module_mac.mm)
+    set_source_files_properties(editor_host_platform_mac.mm PROPERTIES COMPILE_FLAGS -fobjc-arc)
+    target_link_libraries(editor_host_test PRIVATE "-framework Cocoa" "-framework Foundation" "-framework CoreFoundation")
+else()
+    find_package(X11 REQUIRED)
+    target_sources(editor_host_test PRIVATE editor_host_platform_x11.cpp ${hosting_dir}/module_linux.cpp)
+    target_link_libraries(editor_host_test PRIVATE X11::X11 ${CMAKE_DL_LIBS} stdc++fs)
 endif()

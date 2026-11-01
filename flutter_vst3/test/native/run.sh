@@ -19,3 +19,13 @@ c++ -std=c++17 -O1 -g -Wall -Wextra -Werror \
   "${libs[@]}" -o "$build/ipc_host_test"
 
 "$build/ipc_host_test" "$build/probe_worker"
+
+# Names are unlinked after the handshake, so a clean run or a failed start leaves none.
+if [ "$(uname)" = "Linux" ]; then
+  leaked="$(find /dev/shm -maxdepth 1 \( -name 'v3s*' -o -name 'sem.v3r*' -o -name 'sem.v3d*' \))"
+  if [ -n "$leaked" ]; then
+    printf 'FAIL leaked shared memory or semaphores:\n%s\n' "$leaked" >&2
+    exit 1
+  fi
+  echo "PASS no shared memory or semaphores leaked"
+fi

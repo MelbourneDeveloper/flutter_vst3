@@ -126,29 +126,12 @@ jobs:
         run: bash flutter_vst3/test/native/run_plugin_e2e.sh
 
   editor-e2e:
-    name: Flutter editor under Xvfb
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
-      - uses: ./.github/actions/vst3-toolchain
-      - name: Run
-        run: bash flutter_vst3/test/native/run_editor_e2e.sh
-
-  flutter-plugin-build:
-    name: Flutter-enabled Echo build (${{ matrix.os }})
+    name: Flutter editor in a test host (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: macos-latest
-            platform: macos
-          - os: windows-latest
-            platform: windows
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -159,15 +142,9 @@ jobs:
       - name: Set up MSVC
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
-      - name: Build the Flutter app
-        working-directory: vsts/echo
-        run: flutter build ${{ matrix.platform }} --release
-      - name: Build the plugin
+      - name: Run
         shell: bash
-        run: |
-          cmake -S vsts/echo -B "$RUNNER_TEMP/echo" -DCMAKE_BUILD_TYPE=Release -DSMTG_CREATE_PLUGIN_LINK=OFF
-          cmake --build "$RUNNER_TEMP/echo" --config Release --target echo
-          find "$RUNNER_TEMP/echo" -path '*echo.vst3/Contents/*' -type f             \( -name echo_processor -o -name echo_processor.exe \) | grep .
+        run: bash flutter_vst3/test/native/run_editor_e2e.sh
 
   native:
     name: host and graph libraries (${{ matrix.os }})
@@ -197,7 +174,6 @@ jobs:
       - makefile
       - plugin-e2e
       - editor-e2e
-      - flutter-plugin-build
       - native
     runs-on: ubuntu-latest
     steps:
