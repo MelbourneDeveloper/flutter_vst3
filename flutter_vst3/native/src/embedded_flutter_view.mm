@@ -11,6 +11,9 @@
 #include "base/source/fobject.h"
 #include "public.sdk/source/vst/vsteditcontroller.h"
 #include <string>
+#include <memory>
+#include <atomic>
+#include <optional>
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
@@ -30,10 +33,16 @@ static NSString* findPluginBundlePath() {
 
 /// Checks if the bundle contains an embedded Flutter App.framework.
 static BOOL pluginHasFlutter(NSString* bundlePath) {
+#ifndef VST3_FLUTTER_ENTRYPOINT
+    return NO;
+#else
     if (!bundlePath) return NO;
     auto fm = [NSFileManager defaultManager];
     auto fwDir = [bundlePath stringByAppendingPathComponent:@"Contents/Frameworks"];
-    return [fm fileExistsAtPath:[fwDir stringByAppendingPathComponent:@"App.framework"]];
+    return [fm fileExistsAtPath:[fwDir stringByAppendingPathComponent:@"App.framework/App"]]
+        && [fm fileExistsAtPath:[fwDir stringByAppendingPathComponent:@"App.framework/Resources/flutter_assets"]]
+        && [fm fileExistsAtPath:[fwDir stringByAppendingPathComponent:@"FlutterMacOS.framework/Resources/icudtl.dat"]];
+#endif
 }
 
 /// Dynamically loads Flutter and App frameworks from the bundle.
@@ -69,6 +78,7 @@ public:
     }
 
     void onControllerClosed() override {
+        cleanup();
         controller_ = nullptr;
         if (cocoaDelegate_) cocoaDelegate_.controller = nullptr;
         viewHolder_ = nullptr;
@@ -81,9 +91,14 @@ public:
     tresult PLUGIN_API attached(void* parent, FIDString type) override {
         if (!parent || !type || strcmp(type, kPlatformTypeNSView) != 0) return kInvalidArgument;
         parentView_ = parent;
+        size_.reset();
+        hasFlutter_ = !sOwner && pluginHasFlutter(findPluginBundlePath());
+        if (hasFlutter_) sOwner = this;
         NSView* parentNsView = (__bridge NSView*)parent;
+        alive_ = std::make_shared<std::atomic<bool>>(true);
+        auto alive = alive_;
         dispatch_async(dispatch_get_main_queue(), ^{
-            if (parentView_ == parent) {
+            if (alive->load() && parentView_ == parent) {
                 mountView(parentNsView);
             }
         });
@@ -98,6 +113,7 @@ public:
 
     tresult PLUGIN_API getSize(ViewRect* size) override {
         if (!size) return kInvalidArgument;
+        if (size_) { *size = *size_; return kResultTrue; }
         size->left = 0;
         size->top = 0;
         size->right = hasFlutter_ ? 600 : 540;
@@ -106,9 +122,16 @@ public:
         return kResultTrue;
     }
 
-    tresult PLUGIN_API onSize(ViewRect*) override { return kResultTrue; }
+    tresult PLUGIN_API onSize(ViewRect* rect) override {
+        if (!rect || rect->getWidth() <= 0 || rect->getHeight() <= 0) return kInvalidArgument;
+        size_ = *rect;
+        NSView* view = flutterViewController_
+            ? [flutterViewController_ performSelector:sel_registerName("view")] : cocoaContainerView_;
+        [view setFrameSize:NSMakeSize(rect->getWidth(), rect->getHeight())];
+        return kResultTrue;
+    }
     tresult PLUGIN_API setFrame(IPlugFrame* frame) override { frame_ = frame; return kResultTrue; }
-    tresult PLUGIN_API canResize() override { return kResultFalse; }
+    tresult PLUGIN_API canResize() override { return kResultTrue; }
     tresult PLUGIN_API checkSizeConstraint(ViewRect*) override { return kResultTrue; }
     tresult PLUGIN_API onWheel(float) override { return kResultFalse; }
     tresult PLUGIN_API onKeyDown(char16, int16, int16) override { return kResultFalse; }
@@ -116,9 +139,11 @@ public:
     tresult PLUGIN_API onFocus(TBool) override { return kResultTrue; }
 
     void updateParameter(ParamID paramId, ParamValue value) override {
+        auto alive = alive_;
         id flChannel = flutterChannel_;
         if (flChannel) {
             dispatch_async(dispatch_get_main_queue(), ^{
+                if (!alive->load()) return;
                 NSDictionary* args = @{@"id": @(paramId), @"value": @(value)};
                 [flChannel performSelector:sel_registerName("invokeMethod:arguments:")
                                 withObject:@"onParameterChanged"
@@ -127,7 +152,7 @@ public:
         } else if (cocoaDelegate_) {
             auto del = cocoaDelegate_;
             dispatch_async(dispatch_get_main_queue(), ^{
-                [del updateParamId:paramId withValue:value];
+                if (alive->load()) [del updateParamId:paramId withValue:value];
             });
         }
     }
@@ -141,6 +166,8 @@ public:
 
 private:
     void cleanup() {
+        alive_->store(false);
+        if (cocoaDelegate_) cocoaDelegate_.controller = nullptr;
         if (flutterChannel_) {
             [flutterChannel_ performSelector:sel_registerName("setMethodCallHandler:") withObject:nil];
             flutterChannel_ = nil;
@@ -159,6 +186,9 @@ private:
             cocoaContainerView_ = nil;
             cocoaDelegate_ = nil;
         }
+        if (sOwner == this) sOwner = nullptr;
+        hasFlutter_ = NO;
+        size_.reset();
         parentView_ = nullptr;
     }
 
@@ -173,6 +203,9 @@ private:
             }
         }
         if (!mounted) {
+            hasFlutter_ = NO;
+            size_.reset();
+            if (sOwner == this) sOwner = nullptr;
             Vst3PluginEditorDelegate* del = nil;
             cocoaContainerView_ = createCocoaFallbackView(parent, controller_, pluginName_, &del);
             cocoaDelegate_ = del;
@@ -214,6 +247,7 @@ private:
                 [flutterChannel_ performSelector:sel_registerName("setMethodCallHandler:") withObject:nil];
                 flutterChannel_ = nil;
             }
+            if (engine) ((void (*)(id, SEL))objc_msgSend)(engine, sel_registerName("shutDownEngine"));
             flutterViewController_ = nil;
             return NO;
         }
@@ -227,9 +261,10 @@ private:
         flutterChannel_ = [chanCls performSelector:sel_registerName("methodChannelWithName:binaryMessenger:")
                                         withObject:@"flutter_vst3/parameters"
                                         withObject:messenger];
-        auto weakCtrl = controller_;
+        auto alive = alive_;
         id flHandler = ^(id call, void (^result)(id)) {
-            handleMethodCall(call, result, weakCtrl);
+            if (!alive->load()) { result(nil); return; }
+            handleMethodCall(call, result, controller_);
         };
         [flutterChannel_ performSelector:sel_registerName("setMethodCallHandler:") withObject:flHandler];
     }
@@ -237,10 +272,8 @@ private:
     static void handleSetParameter(NSDictionary* args, EditController* ctrl, void (^result)(id)) {
         int pid = [args[@"id"] intValue];
         double val = [args[@"value"] doubleValue];
-        ctrl->beginEdit(pid);
         ctrl->setParamNormalized(pid, val);
         ctrl->performEdit(pid, val);
-        ctrl->endEdit(pid);
         result(@(YES));
     }
 
@@ -258,11 +291,9 @@ private:
         result(dict);
     }
 
-    static void handleGetSharedMemoryInfo(void (^result)(id)) {
-        const char* name = vst3_get_active_shm_name();
-        uintptr_t addr = (uintptr_t)vst3_get_active_shm_ptr();
+    static void handleGetSharedMemoryInfo(EditController* ctrl, void (^result)(id)) {
+        uintptr_t addr = controllerShmAddress(ctrl);
         result(@{
-            @"shmName": name ? [NSString stringWithUTF8String:name] : @"",
             @"address": @(addr),
             @"totalSize": @(VST3_SHM_TOTAL_SIZE),
             @"maxSamples": @(VST3_SHM_MAX_SAMPLES)
@@ -272,22 +303,29 @@ private:
     static void handleMethodCall(id call, void (^result)(id), EditController* ctrl) {
         NSString* method = [call performSelector:sel_registerName("method")];
         id arguments = [call performSelector:sel_registerName("arguments")];
-        if ([method isEqualToString:@"setParameter"] && ctrl) {
+        if (([method isEqualToString:@"beginEdit"] || [method isEqualToString:@"endEdit"]) && ctrl) {
+            const auto pid = [arguments[@"id"] unsignedIntValue];
+            [method isEqualToString:@"beginEdit"] ? ctrl->beginEdit(pid) : ctrl->endEdit(pid);
+            result(@(YES));
+        } else if ([method isEqualToString:@"setParameter"] && ctrl) {
             handleSetParameter((NSDictionary*)arguments, ctrl, result);
         } else if ([method isEqualToString:@"getInitialParameters"] && ctrl) {
             handleGetInitialParameters(ctrl, result);
         } else if ([method isEqualToString:@"getSharedMemoryInfo"]) {
-            handleGetSharedMemoryInfo(result);
+            handleGetSharedMemoryInfo(ctrl, result);
         } else {
             result(nil);
         }
     }
 
+    std::shared_ptr<std::atomic<bool>> alive_{std::make_shared<std::atomic<bool>>(true)};
+    std::optional<ViewRect> size_;
     EditController* controller_{nullptr};
     std::string pluginName_;
     void* parentView_{nullptr};
     IPlugFrame* frame_{nullptr};
     IEmbeddedFlutterView** viewHolder_{nullptr};
+    static inline EmbeddedFlutterView* sOwner{nullptr};
     BOOL hasFlutter_{NO};
     id flutterViewController_{nil};
     id flutterChannel_{nil};

@@ -1,4 +1,3 @@
-import 'dart:ffi' as ffi;
 import 'dart:typed_data';
 
 /// Abstract interface that all Dart VST3 processors must implement
@@ -8,7 +7,7 @@ abstract class VST3Processor {
 
   /// Process stereo audio
   void processStereo(Float32List inputL, Float32List inputR,
-                    Float32List outputL, Float32List outputR);
+      Float32List outputL, Float32List outputR);
 
   /// Set parameter value (normalized 0.0-1.0)
   void setParameter(int paramId, double normalizedValue);
@@ -24,92 +23,4 @@ abstract class VST3Processor {
 
   /// Dispose resources
   void dispose();
-}
-
-/// Callback function signatures for FFI
-typedef DartInitializeProcessorNative = ffi.Void Function(ffi.Double, ffi.Int32);
-typedef DartProcessAudioNative = ffi.Void Function(ffi.Pointer<ffi.Float>, ffi.Pointer<ffi.Float>, ffi.Pointer<ffi.Float>, ffi.Pointer<ffi.Float>, ffi.Int32);
-typedef DartSetParameterNative = ffi.Void Function(ffi.Int32, ffi.Double);
-typedef DartGetParameterNative = ffi.Double Function(ffi.Int32);
-typedef DartGetParameterCountNative = ffi.Int32 Function();
-typedef DartResetNative = ffi.Void Function();
-typedef DartDisposeNative = ffi.Void Function();
-
-/// Main FFI bridge between Dart VST3 plugins and C++ VST3 infrastructure
-class VST3Bridge {
-  static VST3Processor? _processor;
-
-  /// Register a Dart VST3 processor with the bridge
-  /// This must be called before the VST3 plugin can process audio
-  static void registerProcessor(VST3Processor processor) {
-    _processor = processor;
-    
-    // Register FFI callbacks for same-process execution
-    _registerFFICallbacks();
-  }
-  
-  /// Register all FFI callbacks with C++ layer for same-process execution
-  static void _registerFFICallbacks() {
-    // Implementation would register native callbacks
-    // This enables direct FFI communication without separate process
-    throw UnimplementedError('FFI callback registration requires native implementation');
-  }
-
-  /// Initialize the processor
-  /// Called from C++ when VST3 plugin is initialized
-  static void initializeProcessor(double sampleRate, int maxBlockSize) {
-    if (_processor == null) {
-      throw StateError('CRITICAL VST3 BRIDGE FAILURE: Cannot initialize - no processor registered! Call VST3Bridge.registerProcessor() before using the plugin!');
-    }
-    _processor!.initialize(sampleRate, maxBlockSize);
-  }
-
-  /// Process stereo audio block
-  /// Called from C++ VST3 processor during audio processing
-  static void processAudio(ffi.Pointer<ffi.Float> inputL, 
-                          ffi.Pointer<ffi.Float> inputR,
-                          ffi.Pointer<ffi.Float> outputL, 
-                          ffi.Pointer<ffi.Float> outputR,
-                          int numSamples) {
-    if (_processor == null) {
-      throw StateError('CRITICAL VST3 BRIDGE FAILURE: No processor registered! Audio processing CANNOT continue without a Dart processor! Call VST3Bridge.registerProcessor() first!');
-    }
-
-    // Directly process zero-copy typed lists
-    final inL = inputL.asTypedList(numSamples);
-    final inR = inputR.asTypedList(numSamples);
-    final outL = outputL.asTypedList(numSamples);
-    final outR = outputR.asTypedList(numSamples);
-
-    _processor!.processStereo(inL, inR, outL, outR);
-  }
-
-  /// Set parameter value
-  /// Called from C++ when VST3 parameter changes
-  static void setParameter(int paramId, double normalizedValue) {
-    _processor?.setParameter(paramId, normalizedValue);
-  }
-
-  /// Get parameter value
-  /// Called from C++ when VST3 needs current parameter value
-  static double getParameter(int paramId) {
-    return _processor?.getParameter(paramId) ?? 0.0;
-  }
-
-  /// Get parameter count
-  static int getParameterCount() {
-    return _processor?.getParameterCount() ?? 0;
-  }
-
-  /// Reset processor state
-  /// Called from C++ when VST3 is activated/deactivated
-  static void reset() {
-    _processor?.reset();
-  }
-
-  /// Dispose resources
-  static void dispose() {
-    _processor?.dispose();
-    _processor = null;
-  }
 }

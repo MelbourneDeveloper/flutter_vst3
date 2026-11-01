@@ -73,24 +73,16 @@ class GraphBindings {
       lib.lookupFunction<_ProcessC, int Function(Pointer<Void>, Pointer<Float>, Pointer<Float>, Pointer<Float>, Pointer<Float>, int)>('dvh_graph_process_stereo');
 }
 
-/// Helper to load the native library. See dart_vst_host.loadDvh()
-/// for details on path selection. This wrapper is duplicated here to
-/// avoid depending on dart_vst_host from dart_vst_graph.
+/// Opens only the graph library for this platform, or the explicit path.
+/// Loader failures propagate with the attempted path; no substitute is loaded.
 DynamicLibrary _openLib({String? path}) {
-  if (path != null) return DynamicLibrary.open(path);
-  if (Platform.isMacOS) {
-    try { return DynamicLibrary.open('libdart_vst_graph.dylib'); } catch (_) {}
-    return DynamicLibrary.open('libdart_vst_host.dylib');
-  }
-  if (Platform.isLinux) {
-    try { return DynamicLibrary.open('libdart_vst_graph.so'); } catch (_) {}
-    return DynamicLibrary.open('libdart_vst_host.so');
-  }
-  if (Platform.isWindows) {
-    try { return DynamicLibrary.open('dart_vst_graph.dll'); } catch (_) {}
-    return DynamicLibrary.open('dart_vst_host.dll');
-  }
-  throw UnsupportedError('Unsupported platform');
+  final libraryPath = path ?? switch (Platform.operatingSystem) {
+    'macos' => 'libdart_vst_graph.dylib',
+    'linux' => 'libdart_vst_graph.so',
+    'windows' => 'dart_vst_graph.dll',
+    _ => throw UnsupportedError('Unsupported platform'),
+  };
+  return DynamicLibrary.open(libraryPath);
 }
 
 /// High level API wrapping GraphBindings. Manages lifetime and

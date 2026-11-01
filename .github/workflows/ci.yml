@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, 'feature/**']
 
 permissions:
   contents: read
@@ -11,6 +11,9 @@ permissions:
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
+
+env:
+  VST3_SDK_TAG: v3.8.1_build_84
 
 jobs:
   flutter-vst3:
@@ -33,7 +36,7 @@ jobs:
         run: flutter test
 
   plugin-tests:
-    name: ${{ matrix.plugin }} tests
+    name: ${{ matrix.plugin }} analyze and test
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -48,59 +51,153 @@ jobs:
       - name: Resolve dependencies
         working-directory: vsts/${{ matrix.plugin }}
         run: flutter pub get
+      - name: Analyze
+        working-directory: vsts/${{ matrix.plugin }}
+        run: flutter analyze --no-fatal-infos
       - name: Test
         working-directory: vsts/${{ matrix.plugin }}
         run: flutter test
 
-  native:
-    name: native libraries (${{ matrix.os }})
+  ipc:
+    name: IPC round trip (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
-    env:
-      VST3_SDK_DIR: ${{ github.workspace }}/vst3sdk
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
-      - name: Install Linux build dependencies
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libx11-dev libx11-xcb-dev libxcb-util-dev libxcb-cursor-dev libxcb-keysyms1-dev libxcb-xkb-dev libxkbcommon-dev libxkbcommon-x11-dev libfontconfig1-dev libcairo2-dev libgtkmm-3.0-dev libsqlite3-dev
-      - name: Download VST3 SDK
+      - name: Resolve dependencies
+        working-directory: flutter_vst3
+        run: flutter pub get
+      - name: Set up MSVC
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+      - name: Run on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: flutter_vst3/test/native/run.ps1
+      - name: Run on Linux and macOS
+        if: runner.os != 'Windows'
+        run: bash flutter_vst3/test/native/run.sh
+
+  view-logic:
+    name: editor logic
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run
+        run: bash flutter_vst3/test/native/run_view_logic.sh
+
+  makefile:
+    name: make test failure propagation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run
+        run: bash dart_vst_host/test/native/harness_test.sh
+
+  plugin-e2e:
+    name: Echo and validator (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - uses: ./.github/actions/vst3-toolchain
+      - name: Set up MSVC
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+      - name: Resolve dependencies
+        working-directory: vsts/echo
+        run: flutter pub get
+      - name: Run
+        shell: bash
+        run: bash flutter_vst3/test/native/run_plugin_e2e.sh
+
+  editor-e2e:
+    name: Flutter editor under Xvfb
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - uses: ./.github/actions/vst3-toolchain
+      - name: Run
+        run: bash flutter_vst3/test/native/run_editor_e2e.sh
+
+  flutter-plugin-build:
+    name: Flutter-enabled Echo build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: macos
+          - os: windows-latest
+            platform: windows
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - uses: ./.github/actions/vst3-toolchain
+      - name: Set up MSVC
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+      - name: Build the Flutter app
+        working-directory: vsts/echo
+        run: flutter build ${{ matrix.platform }} --release
+      - name: Build the plugin
+        shell: bash
         run: |
-          curl --fail --location --retry 3 -o vst3sdk.zip https://www.steinberg.net/vst3sdk
-          unzip -q vst3sdk.zip
-          if [ -d VST_SDK/vst3sdk ]; then mv VST_SDK/vst3sdk .; fi
-          test -f vst3sdk/CMakeLists.txt
-      - name: Build native libraries
-        run: |
-          for lib in dart_vst_host dart_vst_graph; do
-            cmake -S "$lib/native" -B "$lib/native/build" -DCMAKE_BUILD_TYPE=Release
-            cmake --build "$lib/native/build" --config Release --parallel
-          done
-          for dest in dart_vst_host dart_vst_graph; do
-            cp dart_vst_host/native/build/libdart_vst_host.* "$dest/"
-            cp dart_vst_graph/native/build/libdart_vst_graph.* "$dest/"
-          done
-      - name: Test dart_vst_host
-        working-directory: dart_vst_host
-        run: |
-          dart pub get
-          dart test
-      - name: Test dart_vst_graph
-        working-directory: dart_vst_graph
-        run: |
-          dart pub get
-          dart test
+          cmake -S vsts/echo -B "$RUNNER_TEMP/echo" -G Ninja -DCMAKE_BUILD_TYPE=Release -DSMTG_CREATE_PLUGIN_LINK=OFF
+          cmake --build "$RUNNER_TEMP/echo" --target echo
+
+  native:
+    name: host and graph libraries (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - uses: ./.github/actions/vst3-toolchain
+      - name: Test
+        run: make test-host test-graph
 
   ci:
     name: CI
     if: always()
-    needs: [flutter-vst3, plugin-tests, native]
+    needs:
+      - flutter-vst3
+      - plugin-tests
+      - ipc
+      - view-logic
+      - makefile
+      - plugin-e2e
+      - editor-e2e
+      - flutter-plugin-build
+      - native
     runs-on: ubuntu-latest
     steps:
       - name: Fail if any required job failed or was cancelled

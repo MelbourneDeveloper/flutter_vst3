@@ -22,12 +22,19 @@
 
 #include "pluginterfaces/gui/iplugview.h"
 #include "pluginterfaces/vst/vsttypes.h"
+#include "view_logic.h"
+#include "public.sdk/source/vst/vsteditcontroller.h"
 
 namespace Steinberg {
     class IPlugView;
 
 namespace Vst {
     class EditController;
+
+    inline uintptr_t controllerShmAddress(EditController* controller) {
+        const auto* source = dynamic_cast<const flutter_vst3::ShmAddressSource*>(controller);
+        return source ? source->sharedMemoryAddress() : 0;
+    }
 
     /// Interface implemented by native UI views (Cocoa/Win32/X11) to receive
     /// parameter updates directly from the VST3 EditController.

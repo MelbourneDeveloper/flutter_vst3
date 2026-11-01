@@ -1,34 +1,59 @@
 // Copyright (c) 2025
-// Auto-generated VST3 processor for {{PLUGIN_NAME}} using AOT-compiled Dart code
-// This file is generated automatically by dart_vst3_bridge at build time.
+// Auto-generated VST3 processor for {{PLUGIN_NAME}}.
+// This file is generated automatically by flutter_vst3 at build time.
 // DO NOT EDIT - any changes will be overwritten.
+//
+// Audio runs in a compiled Dart worker process, one per plugin instance, through
+// Vst3IpcHost. A failure to start the worker is reported to the host by
+// setActive returning an error. The host's session is never brought down.
 
 #include "{{PLUGIN_ID}}_ids.h"
+#include "pluginterfaces/base/ibstream.h"
 #include "pluginterfaces/vst/ivstparameterchanges.h"
 #include "pluginterfaces/vst/ivstprocesscontext.h"
-#include "pluginterfaces/base/ibstream.h"
 #include "public.sdk/source/vst/vstaudioeffect.h"
-#include "base/source/fstreamer.h"
-// Using native AOT-compiled Dart processor - NO FFI BRIDGE!
-extern "C" {
-    void {{PLUGIN_ID}}_native_initialize(double sample_rate, int max_block_size);
-    void {{PLUGIN_ID}}_native_process_stereo(float* inputL, float* inputR, float* outputL, float* outputR, int samples);
-    void {{PLUGIN_ID}}_native_set_parameter(int param_id, double value);
-    double {{PLUGIN_ID}}_native_get_parameter(int param_id);
-    void {{PLUGIN_ID}}_native_reset();
-    void {{PLUGIN_ID}}_native_dispose();
-}
+#include "vst3_ipc_host.h"
+
+#include <atomic>
+#include <cstdio>
 #include <cstring>
-#include <stdexcept>
+#include <memory>
+#include <vector>
+
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
 
 using namespace Steinberg;
 using namespace Steinberg::Vst;
+
+namespace {
+constexpr int32 kParameterCount = {{PARAMETER_COUNT}};
+const std::vector<double> kParameterDefaults{ {{PARAMETER_DEFAULT_VALUES}} };
+
+int64 currentProcessIdForMessage() {
+#ifdef _WIN32
+    return static_cast<int64>(GetCurrentProcessId());
+#else
+    return static_cast<int64>(getpid());
+#endif
+}
+
+void silenceBus(AudioBusBuffers& bus, int32 numSamples) {
+    for (int32 channel = 0; channel < bus.numChannels; ++channel) {
+        std::memset(bus.channelBuffers32[channel], 0, static_cast<size_t>(numSamples) * sizeof(Sample32));
+    }
+    bus.silenceFlags = bus.numChannels >= 64 ? ~uint64(0) : (uint64(1) << bus.numChannels) - 1;
+}
+}  // namespace
 
 // Processor for the {{PLUGIN_NAME}} plugin
 class {{PLUGIN_CLASS_NAME}}Processor : public AudioEffect {
 public:
     {{PLUGIN_CLASS_NAME}}Processor();
-    virtual ~{{PLUGIN_CLASS_NAME}}Processor() = default;
+    ~{{PLUGIN_CLASS_NAME}}Processor() override = default;
 
     tresult PLUGIN_API initialize(FUnknown* context) override;
     tresult PLUGIN_API terminate() override;
@@ -42,166 +67,172 @@ public:
     tresult PLUGIN_API getControllerClassId(TUID classId) override;
 
 private:
-{{PARAMETER_VARIABLES}}
-    double sampleRate = 44100.0;
-    
-    // Native AOT processor - NO MORE DART RUNTIME DEPENDENCY!
-    bool nativeProcessorInitialized = false;
+    void applyParameterChanges(ProcessData& data);
+    void forwardStateIfChanged();
+    void sendMemoryAddress(void* address);
+
+    std::vector<std::atomic<double>> parameterValues_;
+    std::atomic<bool> stateChanged_{true};
+    double sampleRate_ = 44100.0;
+    int32 maxBlockSize_ = 4096;
+    bool offline_ = false;
+    bool active_ = false;
+    std::unique_ptr<Vst3IpcHost> host_;
 };
 
-{{PLUGIN_CLASS_NAME}}Processor::{{PLUGIN_CLASS_NAME}}Processor() {
+{{PLUGIN_CLASS_NAME}}Processor::{{PLUGIN_CLASS_NAME}}Processor() : parameterValues_(kParameterCount) {
     setControllerClass(k{{PLUGIN_CLASS_NAME}}ControllerUID);
-    
-    // ARCHITECTURE FIXED: Using AOT-compiled native Dart code - NO RUNTIME DEPENDENCY!
-    nativeProcessorInitialized = false;
-{{PARAMETER_DEFAULTS}}
+    for (int32 i = 0; i < kParameterCount; ++i) {
+        parameterValues_[static_cast<size_t>(i)].store(kParameterDefaults[static_cast<size_t>(i)]);
+    }
 }
 
 tresult {{PLUGIN_CLASS_NAME}}Processor::initialize(FUnknown* context) {
     tresult result = AudioEffect::initialize(context);
     if (result != kResultTrue) return result;
 
-    // Configure audio buses - stereo in/out by default
     addAudioInput(STR16("Stereo In"), SpeakerArr::kStereo);
     addAudioOutput(STR16("Stereo Out"), SpeakerArr::kStereo);
-
+    try {
+        host_ = std::make_unique<Vst3IpcHost>(vst3WorkerPathNextToModule("{{PLUGIN_ID}}_processor"), kParameterCount);
+    } catch (const std::exception& error) {
+        std::fprintf(stderr, "{{PLUGIN_ID}}: %s\n", error.what());
+        return kResultFalse;
+    }
     return kResultTrue;
 }
 
 tresult {{PLUGIN_CLASS_NAME}}Processor::terminate() {
-    if (nativeProcessorInitialized) {
-        {{PLUGIN_ID}}_native_dispose();
-        nativeProcessorInitialized = false;
-    }
+    sendMemoryAddress(nullptr);
+    host_.reset();
     return AudioEffect::terminate();
 }
 
+void {{PLUGIN_CLASS_NAME}}Processor::sendMemoryAddress(void* address) {
+    IMessage* message = allocateMessage();
+    if (!message) return;
+    message->setMessageID("Vst3Shm");
+    message->getAttributes()->setInt("address", static_cast<int64>(reinterpret_cast<intptr_t>(address)));
+    message->getAttributes()->setInt("pid", currentProcessIdForMessage());
+    sendMessage(message);
+    message->release();
+}
+
 tresult {{PLUGIN_CLASS_NAME}}Processor::setActive(TBool state) {
-    if (state) {
-        // Plugin activated - TRY to initialize native AOT processor and FAIL HARD if it doesn't work
-        try {
-            {{PLUGIN_ID}}_native_initialize(sampleRate, 512);
-            nativeProcessorInitialized = true;
-        } catch (const std::exception& e) {
-            // FAIL HARD! CRASH THE WHOLE DAW!
-            fprintf(stderr, "{{PLUGIN_ID}} CRITICAL FAILURE: AOT processor initialization failed: %s\n", e.what());
-            fprintf(stderr, "THIS PLUGIN REQUIRES WORKING AOT COMPILATION!\n");
-            fflush(stderr);
-            abort(); // CRASH THE DAW - NO SILENT FAILURES!
+    if (!host_) return kNotInitialized;
+    try {
+        if (state) {
+            host_->configure(sampleRate_, maxBlockSize_, offline_);
+            stateChanged_.store(true);
+            sendMemoryAddress(host_->memory());
+        } else {
+            sendMemoryAddress(nullptr);
+            host_->reset();
         }
-    } else {
-        // Plugin deactivated - reset native processor
-        if (nativeProcessorInitialized) {
-            try {
-                {{PLUGIN_ID}}_native_reset();
-            } catch (...) {
-                // Even cleanup failures should crash
-                abort();
-            }
-        }
+    } catch (const std::exception& error) {
+        std::fprintf(stderr, "{{PLUGIN_ID}}: %s\n", error.what());
+        active_ = false;
+        return kResultFalse;
     }
+    active_ = state != 0;
     return AudioEffect::setActive(state);
 }
 
 tresult {{PLUGIN_CLASS_NAME}}Processor::setupProcessing(ProcessSetup& setup) {
-    sampleRate = setup.sampleRate;
+    sampleRate_ = setup.sampleRate;
+    maxBlockSize_ = setup.maxSamplesPerBlock;
+    offline_ = setup.processMode == kOffline;
     return AudioEffect::setupProcessing(setup);
 }
 
 tresult {{PLUGIN_CLASS_NAME}}Processor::setBusArrangements(SpeakerArrangement* inputs, int32 numIns,
                                                           SpeakerArrangement* outputs, int32 numOuts) {
-    // Only accept stereo input/output
     if (numIns == 1 && numOuts == 1 && inputs[0] == SpeakerArr::kStereo && outputs[0] == SpeakerArr::kStereo) {
         return AudioEffect::setBusArrangements(inputs, numIns, outputs, numOuts);
     }
     return kResultFalse;
 }
 
-tresult {{PLUGIN_CLASS_NAME}}Processor::process(ProcessData& data) {
-    // Process parameter changes
-    if (data.inputParameterChanges) {
-        int32 numParamsChanged = data.inputParameterChanges->getParameterCount();
-        for (int32 i = 0; i < numParamsChanged; i++) {
-            IParamValueQueue* paramQueue = data.inputParameterChanges->getParameterData(i);
-            if (paramQueue) {
-                ParamValue value;
-                int32 sampleOffset;
-                int32 numPoints = paramQueue->getPointCount();
-                
-                if (paramQueue->getPoint(numPoints - 1, sampleOffset, value) == kResultTrue) {
-                    // Forward parameter changes to native AOT processor
-                    if (nativeProcessorInitialized) {
-                        {{PLUGIN_ID}}_native_set_parameter(paramQueue->getParameterId(), value);
-                    }
-                }
-            }
-        }
+/// Parameters apply per block, so only the last point in each queue is used.
+void {{PLUGIN_CLASS_NAME}}Processor::applyParameterChanges(ProcessData& data) {
+    if (!data.inputParameterChanges) return;
+    const int32 count = data.inputParameterChanges->getParameterCount();
+    for (int32 i = 0; i < count; ++i) {
+        IParamValueQueue* queue = data.inputParameterChanges->getParameterData(i);
+        if (!queue || queue->getPointCount() == 0) continue;
+        ParamValue value = 0.0;
+        int32 sampleOffset = 0;
+        if (queue->getPoint(queue->getPointCount() - 1, sampleOffset, value) != kResultTrue) continue;
+        const ParamID id = queue->getParameterId();
+        if (id >= static_cast<ParamID>(kParameterCount)) continue;
+        parameterValues_[id].store(value);
+        host_->setParameter(static_cast<int>(id), value);
     }
+}
 
-    // Process audio
-    if (data.numInputs == 0 || data.numOutputs == 0) {
+/// setState runs on another thread, and only this thread may talk to the worker.
+void {{PLUGIN_CLASS_NAME}}Processor::forwardStateIfChanged() {
+    if (!stateChanged_.exchange(false)) return;
+    for (int32 i = 0; i < kParameterCount; ++i) {
+        host_->setParameter(i, parameterValues_[static_cast<size_t>(i)].load());
+    }
+}
+
+tresult {{PLUGIN_CLASS_NAME}}Processor::process(ProcessData& data) {
+    if (!host_ || !active_) {
+        for (int32 bus = 0; bus < data.numOutputs; ++bus) silenceBus(data.outputs[bus], data.numSamples);
+        return kNotInitialized;
+    }
+    forwardStateIfChanged();
+    applyParameterChanges(data);
+    if (data.numSamples <= 0 || data.numOutputs == 0) return kResultOk;
+
+    AudioBusBuffers& output = data.outputs[0];
+    if (data.numInputs == 0 || data.inputs[0].numChannels < 2 || output.numChannels < 2) {
+        silenceBus(output, data.numSamples);
         return kResultOk;
     }
-
-    AudioBusBuffers* input = &data.inputs[0];
-    AudioBusBuffers* output = &data.outputs[0];
-    
-    int32 numChannels = input->numChannels;
-    int32 sampleFrames = data.numSamples;
-    
-    if (numChannels > 0 && sampleFrames > 0) {
-        if (nativeProcessorInitialized && numChannels >= 2) {
-            // Process stereo audio through AOT-compiled native Dart code - ZERO FFI OVERHEAD!
-            Sample32* inputL = input->channelBuffers32[0];
-            Sample32* inputR = input->channelBuffers32[1];
-            Sample32* outputL = output->channelBuffers32[0];
-            Sample32* outputR = output->channelBuffers32[1];
-            
-            try {
-                {{PLUGIN_ID}}_native_process_stereo(inputL, inputR, outputL, outputR, sampleFrames);
-            } catch (const std::exception& e) {
-                // FAIL HARD! CRASH THE WHOLE DAW!
-                fprintf(stderr, "{{PLUGIN_ID}} CRITICAL FAILURE: Audio processing failed: %s\n", e.what());
-                fflush(stderr);
-                abort(); // CRASH THE DAW - NO SILENT FAILURES!
-            }
-        } else {
-            // NO FALLBACKS! FAIL HARD! CRASH THE DAW!
-            fprintf(stderr, "VST3 PROCESSOR CRITICAL FAILURE: Native AOT processor not initialized or audio is not stereo!\n");
-            fprintf(stderr, "nativeProcessorInitialized: %s, numChannels: %d\n", 
-                   nativeProcessorInitialized ? "true" : "false", numChannels);
-            fflush(stderr);
-            abort(); // CRASH THE WHOLE DAW!
-        }
-    }
-
+    AudioBusBuffers& input = data.inputs[0];
+    const bool complete = host_->process(input.channelBuffers32[0], input.channelBuffers32[1],
+                                         output.channelBuffers32[0], output.channelBuffers32[1], data.numSamples);
+    output.silenceFlags = complete ? 0 : 3;
     return kResultOk;
 }
 
 tresult {{PLUGIN_CLASS_NAME}}Processor::setState(IBStream* state) {
     if (!state) return kResultFalse;
-
-    // Read parameter values
-{{PARAMETER_STATE_READ}}
-
+    std::vector<double> values(static_cast<size_t>(kParameterCount));
+    for (double& value : values) {
+        int32 bytesRead = 0;
+        if (state->read(&value, sizeof(value), &bytesRead) != kResultTrue || bytesRead != sizeof(value)) {
+            return kResultFalse;
+        }
+    }
+    for (int32 i = 0; i < kParameterCount; ++i) {
+        parameterValues_[static_cast<size_t>(i)].store(values[static_cast<size_t>(i)]);
+    }
+    stateChanged_.store(true);
     return kResultOk;
 }
 
 tresult {{PLUGIN_CLASS_NAME}}Processor::getState(IBStream* state) {
     if (!state) return kResultFalse;
-
-    // Write parameter values
-{{PARAMETER_STATE_WRITE}}
-
+    for (auto& parameter : parameterValues_) {
+        double value = parameter.load();
+        int32 bytesWritten = 0;
+        if (state->write(&value, sizeof(value), &bytesWritten) != kResultTrue || bytesWritten != sizeof(value)) {
+            return kResultFalse;
+        }
+    }
     return kResultOk;
 }
 
 tresult {{PLUGIN_CLASS_NAME}}Processor::getControllerClassId(TUID classId) {
-    memcpy(classId, k{{PLUGIN_CLASS_NAME}}ControllerUID, sizeof(TUID));
+    k{{PLUGIN_CLASS_NAME}}ControllerUID.toTUID(classId);
     return kResultTrue;
 }
 
-// Factory functions in proper namespace  
+// Factory functions in proper namespace
 namespace Steinberg {
 namespace Vst {
 namespace {{PLUGIN_CLASS_NAME}} {

@@ -8,6 +8,25 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
 endif()
 
+# Which Flutter bundle to embed: Release unless this is a Debug build. A Release
+# plugin must never pick up a Debug bundle by accident.
+option(FLUTTER_VST3_NATIVE_UI_ONLY "Build without the Flutter editor, using native sliders" OFF)
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(FLUTTER_VST3_BUNDLE_MODE "Debug")
+else()
+    set(FLUTTER_VST3_BUNDLE_MODE "Release")
+endif()
+string(TOLOWER "${FLUTTER_VST3_BUNDLE_MODE}" FLUTTER_VST3_BUNDLE_MODE_LOWER)
+
+include(${CMAKE_CURRENT_LIST_DIR}/VST3BridgeBundle.cmake)
+
+# Stops the configure if a plugin wants a Flutter editor and path doesn't exist.
+function(flutter_vst3_require_flutter_path path hint)
+    if(FLUTTER_VST3_WANTS_FLUTTER AND NOT EXISTS "${path}")
+        message(FATAL_ERROR "Flutter editor file not found: ${path}\n${hint}\nSet FLUTTER_VST3_NATIVE_UI_ONLY=ON to build with native sliders.")
+    endif()
+endfunction()
+
 # Function to create a VST3 plugin using the bridge
 function(add_dart_vst3_plugin target_name dart_file)
     # Parse additional arguments
@@ -40,7 +59,8 @@ function(add_dart_vst3_plugin target_name dart_file)
         message(FATAL_ERROR "VST3 SDK not found at ${VST3_SDK_DIR}. Download it first.")
     endif()
 
-    # Disable validator and module info to avoid build failures
+    # Tests run the validator explicitly against the finished bundle. It can't
+    # run as a post-build step because the worker is copied in after linking.
     set(SMTG_RUN_VST_VALIDATOR OFF CACHE BOOL "" FORCE)
     set(SMTG_CREATE_MODULE_INFO OFF CACHE BOOL "" FORCE)
     
@@ -48,6 +68,7 @@ function(add_dart_vst3_plugin target_name dart_file)
     set(SMTG_ADD_VST3_PLUGINS_SAMPLES OFF CACHE BOOL "" FORCE)
     set(SMTG_ADD_VST3_HOSTING_SAMPLES OFF CACHE BOOL "" FORCE)
     set(SMTG_ADD_VSTGUI OFF CACHE BOOL "" FORCE)
+    set(SMTG_ENABLE_VSTGUI_SUPPORT OFF CACHE BOOL "" FORCE)
     set(SMTG_CREATE_VST3_LINK OFF CACHE BOOL "" FORCE)
     set(SMTG_CREATE_PLUGIN_LINK OFF CACHE BOOL "" FORCE)
     
@@ -88,8 +109,7 @@ function(add_dart_vst3_plugin target_name dart_file)
         message(FATAL_ERROR "Code generator not found: ${GENERATE_SCRIPT}")
     endif()
     
-    # COMPILE DART TO NATIVE EXECUTABLE - NOT AOT!
-    # Use the combined UI+processor executable that contains BOTH Flutter UI and audio processing
+    # Compile the headless DSP worker. It must not import Flutter.
     set(DART_EXE_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/lib/${target_name}_processor_exe.dart")
     
     if(EXISTS ${DART_EXE_SOURCE})
@@ -105,7 +125,6 @@ function(add_dart_vst3_plugin target_name dart_file)
             COMMAND ${DART_EXECUTABLE} compile exe 
                     ${DART_EXE_SOURCE} 
                     -o ${DART_EXE_OUTPUT}
-                    --verbose
             RESULT_VARIABLE DART_COMPILE_RESULT
             OUTPUT_VARIABLE DART_COMPILE_OUTPUT
             ERROR_VARIABLE DART_COMPILE_ERROR
@@ -121,7 +140,7 @@ function(add_dart_vst3_plugin target_name dart_file)
         # Store executable path for later use in bundle creation
         set(DART_PROCESSOR_EXE "${DART_EXE_OUTPUT}")
     else()
-        message(WARNING "No Dart executable source at ${DART_EXE_SOURCE}")
+        message(FATAL_ERROR "No Dart worker source at ${DART_EXE_SOURCE}")
     endif()
     
     # Run code generation using Dart script
@@ -172,12 +191,14 @@ function(add_dart_vst3_plugin target_name dart_file)
         endif()
     endforeach()
     
-    # Check if native C++ processor exists (transpiled from Dart)
-    set(NATIVE_PROCESSOR_FILE "${CMAKE_CURRENT_BINARY_DIR}/generated/${target_name}_processor_native.cpp")
-    
     # Bridge components - Platform-specific view
     set(bridge_sources_no_factory)
-    list(APPEND bridge_sources_no_factory ${BRIDGE_DIR}/src/vst3_shared_memory.cpp)
+    list(APPEND bridge_sources_no_factory ${BRIDGE_DIR}/src/vst3_ipc_host.cpp)
+    if(SMTG_WIN)
+        list(APPEND bridge_sources_no_factory ${BRIDGE_DIR}/src/vst3_ipc_platform_win.cpp)
+    else()
+        list(APPEND bridge_sources_no_factory ${BRIDGE_DIR}/src/vst3_ipc_platform_posix.cpp)
+    endif()
     if(SMTG_MAC)
         list(APPEND bridge_sources_no_factory
             ${BRIDGE_DIR}/src/embedded_flutter_view.mm
@@ -189,14 +210,6 @@ function(add_dart_vst3_plugin target_name dart_file)
         )
     else()
         list(APPEND bridge_sources_no_factory ${BRIDGE_DIR}/src/embedded_flutter_view.cpp)
-    endif()
-    
-    if(EXISTS ${NATIVE_PROCESSOR_FILE})
-        message(STATUS "Using native C++ processor: ${NATIVE_PROCESSOR_FILE}")
-        list(APPEND bridge_sources_no_factory ${NATIVE_PROCESSOR_FILE})
-    else()
-        message(STATUS "Using FFI Dart bridge: ${BRIDGE_DIR}/src/dart_vst3_bridge.cpp")
-        list(APPEND bridge_sources_no_factory ${BRIDGE_DIR}/src/dart_vst3_bridge.cpp)
     endif()
     
     # Add platform-specific main entry point
@@ -240,6 +253,7 @@ function(add_dart_vst3_plugin target_name dart_file)
             ${CMAKE_CURRENT_BINARY_DIR}/generated
             ${CMAKE_CURRENT_SOURCE_DIR}/include
             ${BRIDGE_DIR}/include
+            ${BRIDGE_DIR}/src
             ${CMAKE_CURRENT_SOURCE_DIR}/../../native/include
             ${PLUGIN_INCLUDE_DIRS}
     )
@@ -257,6 +271,15 @@ function(add_dart_vst3_plugin target_name dart_file)
         )
     endif()
 
+    set(FLUTTER_VST3_WANTS_FLUTTER FALSE)
+    if(JSON_FLUTTER_ENTRYPOINT AND NOT FLUTTER_VST3_NATIVE_UI_ONLY)
+        set(FLUTTER_VST3_WANTS_FLUTTER TRUE)
+        target_compile_definitions(${target_name} PRIVATE
+            VST3_FLUTTER_ENTRYPOINT="${JSON_FLUTTER_ENTRYPOINT}"
+        )
+    endif()
+    message(STATUS "${target_name} Flutter editor: ${FLUTTER_VST3_WANTS_FLUTTER}")
+
     # Link against SDK and additional libraries
     target_link_libraries(${target_name}
         PRIVATE
@@ -267,7 +290,8 @@ function(add_dart_vst3_plugin target_name dart_file)
     if(SMTG_WIN)
         target_link_libraries(${target_name} PRIVATE comctl32)
         set(FLUTTER_EPHEMERAL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/windows/flutter/ephemeral")
-        if(EXISTS "${FLUTTER_EPHEMERAL_DIR}/flutter_windows.h")
+        flutter_vst3_require_flutter_path("${FLUTTER_EPHEMERAL_DIR}/flutter_windows.h" "Run: flutter build windows --release")
+        if(FLUTTER_VST3_WANTS_FLUTTER)
             message(STATUS "Configuring Flutter Windows UI embedding for ${target_name}...")
             target_include_directories(${target_name} PRIVATE
                 "${FLUTTER_EPHEMERAL_DIR}"
@@ -306,8 +330,11 @@ function(add_dart_vst3_plugin target_name dart_file)
         pkg_check_modules(GTK REQUIRED IMPORTED_TARGET gtk+-3.0 gtk+-x11-3.0)
         target_link_libraries(${target_name} PRIVATE PkgConfig::GTK ${CMAKE_DL_LIBS})
         set(FLUTTER_LINUX_EPHEMERAL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/linux/flutter/ephemeral")
-        if(EXISTS "${FLUTTER_LINUX_EPHEMERAL_DIR}/flutter_linux/flutter_linux.h")
+        flutter_vst3_require_flutter_path("${FLUTTER_LINUX_EPHEMERAL_DIR}/flutter_linux/flutter_linux.h" "Run: flutter build linux --release")
+        if(FLUTTER_VST3_WANTS_FLUTTER)
             message(STATUS "Configuring Flutter Linux UI embedding for ${target_name}...")
+            # The engine library is bundled next to the plugin binary.
+            set_target_properties(${target_name} PROPERTIES BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN")
             target_include_directories(${target_name} PRIVATE
                 "${FLUTTER_LINUX_EPHEMERAL_DIR}"
             )
@@ -321,153 +348,5 @@ function(add_dart_vst3_plugin target_name dart_file)
     endif()
 
     # Set bundle properties on macOS
-    if(SMTG_MAC)
-        # Create Info.plist.in in build directory to avoid polluting source
-        set(INFO_PLIST_PATH "${CMAKE_CURRENT_BINARY_DIR}/Info.plist.in")
-        if(NOT EXISTS ${INFO_PLIST_PATH})
-            file(WRITE ${INFO_PLIST_PATH} "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
-<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
-<plist version=\"1.0\">
-<dict>
-    <key>CFBundleExecutable</key>
-    <string>${PLUGIN_PLUGIN_NAME}</string>
-    <key>CFBundleIconFile</key>
-    <string></string>
-    <key>CFBundleIdentifier</key>
-    <string>${PLUGIN_BUNDLE_IDENTIFIER}</string>
-    <key>CFBundleName</key>
-    <string>${PLUGIN_PLUGIN_NAME}</string>
-    <key>CFBundlePackageType</key>
-    <string>BNDL</string>
-    <key>CFBundleVersion</key>
-    <string>1.0.0</string>
-    <key>CFBundleSignature</key>
-    <string>????</string>
-</dict>
-</plist>")
-        endif()
-        
-        smtg_target_set_bundle(${target_name}
-            BUNDLE_IDENTIFIER "${PLUGIN_BUNDLE_IDENTIFIER}"
-            COMPANY_NAME "${PLUGIN_COMPANY_NAME}"
-            INFOPLIST_IN ${INFO_PLIST_PATH}
-        )
-        
-        # Set bundle bit for plugins without native library
-        get_target_property(PLUGIN_PACKAGE_PATH ${target_name} SMTG_PLUGIN_PACKAGE_PATH)
-        set(BUNDLE_COMMANDS)
-
-        # Copy Dart processor executable if exists
-        if(EXISTS ${DART_PROCESSOR_EXE})
-            list(APPEND BUNDLE_COMMANDS
-                COMMAND ${CMAKE_COMMAND} -E copy
-                        ${DART_PROCESSOR_EXE}
-                        "${PLUGIN_PACKAGE_PATH}/Contents/MacOS/${target_name}_processor"
-            )
-        endif()
-
-        # Copy and link host dylib if exists
-        if(EXISTS ${DART_VST_HOST_LIB})
-            target_link_libraries(${target_name} PRIVATE ${DART_VST_HOST_LIB})
-            list(APPEND BUNDLE_COMMANDS
-                COMMAND ${CMAKE_COMMAND} -E make_directory "${PLUGIN_PACKAGE_PATH}/Contents/Frameworks"
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                        "${DART_VST_HOST_LIB}"
-                        "${PLUGIN_PACKAGE_PATH}/Contents/Frameworks/"
-                COMMAND install_name_tool -change @rpath/libdart_vst_host.dylib
-                        @loader_path/../Frameworks/libdart_vst_host.dylib
-                        "${PLUGIN_PACKAGE_PATH}/Contents/MacOS/${target_name}"
-            )
-        endif()
-
-        # Copy Flutter frameworks if present
-        set(FLUTTER_MAC_FW_DIR "${CMAKE_CURRENT_SOURCE_DIR}/build/macos/Build/Products/Release/${target_name}.app/Contents/Frameworks")
-        if(NOT EXISTS "${FLUTTER_MAC_FW_DIR}/FlutterMacOS.framework")
-            set(FLUTTER_MAC_FW_DIR "${CMAKE_CURRENT_SOURCE_DIR}/build/macos/Build/Products/Debug/${target_name}.app/Contents/Frameworks")
-        endif()
-        if(EXISTS "${FLUTTER_MAC_FW_DIR}/FlutterMacOS.framework")
-            list(APPEND BUNDLE_COMMANDS
-                COMMAND ${CMAKE_COMMAND} -E make_directory "${PLUGIN_PACKAGE_PATH}/Contents/Frameworks"
-                COMMAND cp -a "${FLUTTER_MAC_FW_DIR}/FlutterMacOS.framework" "${PLUGIN_PACKAGE_PATH}/Contents/Frameworks/"
-                COMMAND cp -a "${FLUTTER_MAC_FW_DIR}/App.framework" "${PLUGIN_PACKAGE_PATH}/Contents/Frameworks/"
-                COMMAND codesign --force --sign - "${PLUGIN_PACKAGE_PATH}/Contents/Frameworks/FlutterMacOS.framework"
-                COMMAND codesign --force --sign - "${PLUGIN_PACKAGE_PATH}/Contents/Frameworks/App.framework"
-            )
-        endif()
-
-        # Set bundle bit, strip quarantine, and sign outer bundle
-        list(APPEND BUNDLE_COMMANDS
-            COMMAND SetFile -a B "${PLUGIN_PACKAGE_PATH}"
-            COMMAND xattr -cr "${PLUGIN_PACKAGE_PATH}"
-            COMMAND codesign --force --sign - "${PLUGIN_PACKAGE_PATH}"
-        )
-
-        add_custom_command(TARGET ${target_name} POST_BUILD
-            ${BUNDLE_COMMANDS}
-            COMMENT "Finalizing and codesigning VST3 bundle"
-        )
-    elseif(SMTG_WIN)
-        get_target_property(PLUGIN_PACKAGE_PATH ${target_name} SMTG_PLUGIN_PACKAGE_PATH)
-        set(BUNDLE_COMMANDS)
-        if(EXISTS ${DART_PROCESSOR_EXE})
-            list(APPEND BUNDLE_COMMANDS
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                        "${DART_PROCESSOR_EXE}"
-                        "${PLUGIN_PACKAGE_PATH}/Contents/x86_64-win/${target_name}_processor.exe"
-            )
-        endif()
-        set(FLUTTER_WIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/build/windows/x64/runner/Release")
-        if(NOT EXISTS "${FLUTTER_WIN_DIR}/flutter_windows.dll")
-            set(FLUTTER_WIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/build/windows/x64/runner/Debug")
-        endif()
-        if(EXISTS "${FLUTTER_WIN_DIR}/flutter_windows.dll")
-            list(APPEND BUNDLE_COMMANDS
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                        "${FLUTTER_WIN_DIR}/flutter_windows.dll"
-                        "${PLUGIN_PACKAGE_PATH}/Contents/x86_64-win/flutter_windows.dll"
-                COMMAND ${CMAKE_COMMAND} -E copy_directory
-                        "${FLUTTER_WIN_DIR}/data"
-                        "${PLUGIN_PACKAGE_PATH}/Contents/x86_64-win/data"
-            )
-        endif()
-        if(BUNDLE_COMMANDS)
-            add_custom_command(TARGET ${target_name} POST_BUILD
-                ${BUNDLE_COMMANDS}
-                COMMENT "Bundling Dart processor and Flutter Windows assets into VST3 package"
-            )
-        endif()
-    elseif(SMTG_LINUX)
-        get_target_property(PLUGIN_PACKAGE_PATH ${target_name} SMTG_PLUGIN_PACKAGE_PATH)
-        set(BUNDLE_COMMANDS)
-        if(EXISTS ${DART_PROCESSOR_EXE})
-            list(APPEND BUNDLE_COMMANDS
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                        "${DART_PROCESSOR_EXE}"
-                        "${PLUGIN_PACKAGE_PATH}/Contents/x86_64-linux/${target_name}_processor"
-            )
-        endif()
-        set(FLUTTER_LINUX_DIR "${CMAKE_CURRENT_SOURCE_DIR}/build/linux/x64/release/bundle")
-        if(NOT EXISTS "${FLUTTER_LINUX_DIR}/lib/libflutter_linux_gtk.so")
-            set(FLUTTER_LINUX_DIR "${CMAKE_CURRENT_SOURCE_DIR}/build/linux/x64/debug/bundle")
-        endif()
-        if(EXISTS "${FLUTTER_LINUX_DIR}/lib/libflutter_linux_gtk.so")
-            list(APPEND BUNDLE_COMMANDS
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                        "${FLUTTER_LINUX_DIR}/lib/libflutter_linux_gtk.so"
-                        "${PLUGIN_PACKAGE_PATH}/Contents/x86_64-linux/libflutter_linux_gtk.so"
-                COMMAND ${CMAKE_COMMAND} -E copy_directory
-                        "${FLUTTER_LINUX_DIR}/data"
-                        "${PLUGIN_PACKAGE_PATH}/Contents/x86_64-linux/data"
-                COMMAND ${CMAKE_COMMAND} -E copy_directory
-                        "${FLUTTER_LINUX_DIR}/lib"
-                        "${PLUGIN_PACKAGE_PATH}/Contents/x86_64-linux/lib"
-            )
-        endif()
-        if(BUNDLE_COMMANDS)
-            add_custom_command(TARGET ${target_name} POST_BUILD
-                ${BUNDLE_COMMANDS}
-                COMMENT "Bundling Dart processor and Flutter Linux assets into VST3 package"
-            )
-        endif()
-    endif()
+    flutter_vst3_bundle_resources(${target_name})
 endfunction()

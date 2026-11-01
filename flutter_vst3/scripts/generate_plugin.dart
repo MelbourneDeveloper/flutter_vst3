@@ -42,6 +42,7 @@ void generatePluginFiles(String pluginDir, String pluginName, String targetName,
 
   final parameters = (metadata['parameters'] as List? ?? [])
       .cast<Map<String, dynamic>>();
+  _validateParameterIds(parameters);
 
   // Generate files
   final genDir = buildDir != null 
@@ -81,7 +82,6 @@ void generatePluginFiles(String pluginDir, String pluginName, String targetName,
     ('plugin_controller.cpp.template', '${targetName}_controller.cpp'),
     ('plugin_processor_aot.cpp.template', '${targetName}_processor.cpp'),
     ('plugin_factory.cpp.template', '${targetName}_factory.cpp'),
-    ('plugin_processor_native.cpp.template', '${targetName}_processor_native.cpp')
   ];
   
   for (final template in templates) {
@@ -89,8 +89,7 @@ void generatePluginFiles(String pluginDir, String pluginName, String targetName,
     final outputFile = File('${genDir.path}/${template.$2}');
     
     if (!templateFile.existsSync()) {
-      print('WARNING: Template missing: ${templateFile.path}');
-      continue;
+      throw Exception('Template missing: ${templateFile.path}');
     }
     
     var content = templateFile.readAsStringSync();
@@ -123,8 +122,7 @@ Map<String, String> _generateCppSnippets(List<Map<String, dynamic>> parameters, 
   if (parameters.isEmpty) {
     return {
       '{{PARAMETER_COUNT}}': '0',
-      '{{PARAMETER_VARIABLES}}': '    // No parameters',
-      '{{PARAMETER_DEFAULTS}}': '    // No parameters to initialize',
+      '{{PARAMETER_DEFAULT_VALUES}}': '',
       '{{PARAMETER_CONTROLLER_INIT}}': '    // No parameters to add',
       '{{PARAMETER_STATE_SAVE}}': '    // No parameters to save', 
       '{{PARAMETER_STATE_LOAD}}': '    // No parameters to load',
@@ -135,12 +133,6 @@ Map<String, String> _generateCppSnippets(List<Map<String, dynamic>> parameters, 
       '{{PARAMETER_TO_STRING}}': '        return EditController::getParamStringByValue(id, valueNormalized, string);',
     };
   }
-  
-  // Generate parameter variables
-  final paramVars = parameters.map((p) => '    double ${p['name']} = ${p['defaultValue']};').join('\n');
-  
-  // Generate parameter initialization
-  final paramDefaults = parameters.map((p) => '    ${p['name']} = ${p['defaultValue']};').join('\n');
   
   // Generate controller parameter registration
   final controllerInit = parameters.map((p) {
@@ -162,25 +154,15 @@ Map<String, String> _generateCppSnippets(List<Map<String, dynamic>> parameters, 
             return kResultTrue;''';
   }).join('\n');
   
-  // Generate state read/write
-  final stateRead = parameters.map((p) => '''    // Read ${p['name']}
-    if (state->read(&${p['name']}, sizeof(${p['name']}), &bytesRead) != kResultTrue) return kResultFalse;''').join('\n');
-  
-  final stateWrite = parameters.map((p) => '''    // Write ${p['name']}
-    if (state->write(&${p['name']}, sizeof(${p['name']}), &bytesWritten) != kResultTrue) return kResultFalse;''').join('\n');
-  
   return {
     '{{PARAMETER_COUNT}}': parameters.length.toString(),
-    '{{PARAMETER_VARIABLES}}': paramVars,
-    '{{PARAMETER_DEFAULTS}}': paramDefaults,
+    '{{PARAMETER_DEFAULT_VALUES}}': parameters.map((p) => '${p['defaultValue']}').join(', '),
     '{{PARAMETER_CONTROLLER_INIT}}': controllerInit,
     '{{GET_PARAMETER_INFO}}': paramInfoCases + '\n        return kResultFalse;',
     '{{NORMALIZE_PARAMETER}}': '        return normalizedValue; // Identity for now',
     '{{DENORMALIZE_PARAMETER}}': '        return plainValue; // Identity for now',
     '{{STRING_TO_PARAMETER}}': '        return EditController::getParamValueByString(id, string, valueNormalized);',
     '{{PARAMETER_TO_STRING}}': '        return EditController::getParamStringByValue(id, valueNormalized, string);',
-    '{{PARAMETER_STATE_READ}}': parameters.isEmpty ? '        // No parameters to read' : '    int32 bytesRead = 0;\n$stateRead',
-    '{{PARAMETER_STATE_WRITE}}': parameters.isEmpty ? '        // No parameters to write' : '    int32 bytesWritten = 0;\n$stateWrite',
   };
 }
 
@@ -196,9 +178,9 @@ ${parameters.map((p) => '    k${_toPascalCase(p['name'] as String)}Param = ${p['
     kNumParameters = ${parameters.length}
 };
 
-// Plugin UIDs as proper FUID objects (generate proper GUIDs in production)
-static const FUID k${pluginClass}ProcessorUID(0xF9D0C991, 0x074C8404, 0x4D825FC5, 0x21E8F92B);
-static const FUID k${pluginClass}ControllerUID(0xA0115732, 0x16F06596, 0x4B9846B6, 0x007933D0);
+// Derived from the bundle identifier, so they are stable and unique per plugin.
+static const FUID k${pluginClass}ProcessorUID(${pluginUid('${metadata['bundleIdentifier']}:processor')});
+static const FUID k${pluginClass}ControllerUID(${pluginUid('${metadata['bundleIdentifier']}:controller')});
 ''';
   
   File('${genDir.path}/${targetName}_ids.h').writeAsStringSync(content);
@@ -214,9 +196,32 @@ set(JSON_BUNDLE_ID "${metadata['bundleIdentifier']}")
 set(JSON_WEB "${metadata['companyWeb']}")
 set(JSON_EMAIL "${metadata['companyEmail']}")
 set(PARAM_COUNT "${parameters.length}")
+set(JSON_FLUTTER_ENTRYPOINT "${metadata['flutterEntrypoint'] ?? ''}")
 ''';
   
   File('${genDir.path}/metadata.cmake').writeAsStringSync(content);
+}
+
+/// Throws unless parameter ids are exactly 0..n-1. The processor, controller and
+/// saved state formats all index parameters by id.
+void _validateParameterIds(List<Map<String, dynamic>> parameters) {
+  for (var i = 0; i < parameters.length; i++) {
+    if (parameters[i]['id'] != i) {
+      throw Exception('Parameter ids must be 0..n-1 in order. Index $i has id ${parameters[i]['id']}');
+    }
+  }
+}
+
+/// Returns four comma-separated 32-bit hex words derived from [key] with
+/// FNV-1a, for use as a VST3 FUID. The same key always gives the same result.
+String pluginUid(String key) {
+  return List.generate(4, (word) {
+    var hash = 0x811C9DC5 ^ word;
+    for (final unit in key.codeUnits) {
+      hash = ((hash ^ unit) * 0x01000193) & 0xFFFFFFFF;
+    }
+    return '0x${hash.toRadixString(16).padLeft(8, '0').toUpperCase()}';
+  }).join(', ');
 }
 
 String _toPascalCase(String input) {

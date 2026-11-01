@@ -1,19 +1,19 @@
-# Flutter VST3 UI Integration Specification
+# Plugin UI and DSP design
 
-## Same Process/Isolate Execution
-The Flutter UI and Dart audio processing code MUST execute in the SAME process and SAME Dart isolate. This is non-negotiable aspect of the design
+The VST3 module runs in the audio host process. Its editor embeds a Flutter
+engine in the host-provided native window (Cocoa on macOS, Win32 on Windows,
+GTK/X11 on Linux). The Flutter editor is not the audio processor.
 
-The flutter_vst3 implementation compiles Dart to a separate native executable that communicates via binary IPC. This executable contains the Flutter UI. This process uses Binary IPC so that there is two way communication with C++. It is critical that all IPC is binary based.
+DSP runs in a separate compiled Dart worker process for each plugin instance.
+The native processor exchanges audio blocks and parameter commands with that
+worker through shared memory and platform synchronization primitives. Audio
+is copied between the host buffers and shared memory; this is not zero-copy.
 
-The Dart/Flutter exe must compile to native machine code. Not JIT, no AOT.
+The controller connects Flutter parameter gestures to VST3 host automation.
+The editor reads the instance's shared-memory telemetry for visualization.
+Saved parameter state belongs to the VST3 processor and must be replayed to
+the worker when restoring a session. Closing an editor must not stop DSP;
+disposing a processor must release its worker and IPC resources.
 
-## Communication
-
-The Dart/Flutter exe communications with the C++ aspect of the plugin via binary IPC. Introduce a Dart framework to differentiate between audio signals over binary IPC and parameter changes etc. 
-
-## Architecture 
-
-Dart/Flutter exe (Audio Processing AND UI) -> C++ -> DAW
-DAW -> C++ -> Dart/Flutter exe (Audio Processing AND UI)
-
-Note: the communication between Dart/Flutter exe and C++ is Binary IPC!!!
+Linux embedded editors require X11. Launch Flutter hosts with
+`GDK_BACKEND=x11 flutter run`; Wayland embedding is not supported.

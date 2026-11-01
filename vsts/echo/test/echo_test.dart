@@ -9,10 +9,10 @@ void main() {
     test('initializes correctly', () {
       final processor = EchoProcessor();
       processor.initialize(44100.0, 512);
-      
+
       expect(processor, isNotNull);
     });
-    
+
     test('processes stereo audio without crashing', () {
       final processor = EchoProcessor();
       processor.initialize(44100.0, 512);
@@ -20,67 +20,69 @@ void main() {
       parameters.mix = 0.8; // High mix for obvious effect
       parameters.feedback = 0.7; // High feedback
       parameters.delayTime = 0.3; // Medium delay
-      
+
       final inputL = Float32List(128)..fillRange(0, 128, 0.5);
       final inputR = Float32List(128)..fillRange(0, 128, 0.3);
       final outputL = Float32List(128);
       final outputR = Float32List(128);
-      
+
       processor.processStereo(inputL, inputR, outputL, outputR, parameters);
-      
+
       // Should produce some output (not all zeros due to dry signal)
-      expect(outputL.any((sample) => sample != 0.0), isTrue);
-      expect(outputR.any((sample) => sample != 0.0), isTrue);
+      expect(outputL, everyElement(closeTo(0.1, 1e-8)));
+      expect(outputR, everyElement(closeTo(0.06, 1e-8)));
     });
-    
-    test('produces obvious echo effect', () {
+
+    test('preserves the exact dry block before the delay arrives', () {
       final processor = EchoProcessor();
       processor.initialize(44100.0, 512);
       final parameters = EchoParameters();
       parameters.mix = 0.9; // EXTREME mix for testing
       parameters.feedback = 0.8; // High feedback
       parameters.delayTime = 0.2; // Fast delay
-      
+
       // Process silence first to clear buffers
       final silence = Float32List(128);
       final output = Float32List(128);
       processor.processStereo(silence, silence, output, output, parameters);
-      
+
       // Now process a short impulse
       final impulse = Float32List(128);
       impulse[0] = 1.0; // Single sample impulse
       final impulseOutput = Float32List(128);
-      
-      processor.processStereo(impulse, impulse, impulseOutput, impulseOutput, parameters);
-      
+
+      processor.processStereo(
+          impulse, impulse, impulseOutput, impulseOutput, parameters);
+
       // Should have dry signal at start
-      expect(impulseOutput[0], greaterThan(0.0));
+      expect(impulseOutput[0], closeTo(0.1, 1e-8));
+      expect(impulseOutput.skip(1), everyElement(0.0));
     });
-    
+
     test('can be reset', () {
       final processor = EchoProcessor();
       processor.initialize(44100.0, 512);
-      
+
       processor.reset();
-      
+
       // After reset, should still work
       final parameters = EchoParameters();
       parameters.mix = 0.5; // Moderate settings
       final input = Float32List(128)..fillRange(0, 128, 0.1);
       final output = Float32List(128);
       processor.processStereo(input, input, output, output, parameters);
-      
-      expect(output.any((sample) => sample != 0.0), isTrue);
+
+      expect(output, everyElement(closeTo(0.05, 1e-8)));
     });
 
-    test('modulates delay time smoothly without clicks', () {
+    test('delay automation cannot emit audio before either delay arrives', () {
       final processor = EchoProcessor();
       processor.initialize(44100.0, 512);
       final parameters = EchoParameters()
         ..mix = 1.0
         ..feedback = 0.5
         ..delayTime = 0.1;
-      
+
       final input = Float32List.fromList(
         List.generate(512, (i) => (i % 32 == 0) ? 0.8 : 0.0),
       );
@@ -92,10 +94,8 @@ void main() {
       final output2 = Float32List(512);
       processor.processStereo(input, input, output2, output2, parameters);
 
-      for (var i = 1; i < output2.length; i++) {
-        final diff = (output2[i] - output2[i - 1]).abs();
-        expect(diff, lessThan(0.95));
-      }
+      expect(output, everyElement(0.0));
+      expect(output2, everyElement(0.0));
     });
   });
 
@@ -104,24 +104,24 @@ void main() {
       final plugin = DartEchoPlugin();
       expect(plugin.initialize(), isTrue);
     });
-    
+
     test('has correct plugin info', () {
       final plugin = DartEchoPlugin();
       final info = plugin.pluginInfo;
-      
+
       expect(info['name'], equals('Echo'));
       expect(info['vendor'], equals('CF'));
       expect(info['inputs'], equals(2));
       expect(info['outputs'], equals(2));
       expect(info['parameters'], equals(4)); // Now has 4 parameters
     });
-    
+
     test('can process audio without crashing', () {
       final plugin = DartEchoPlugin();
       plugin.initialize();
       plugin.setupProcessing(44100.0, 512);
       plugin.setActive(true);
-      
+
       final inputs = [
         Float32List(128)..fillRange(0, 128, 0.5),
         Float32List(128)..fillRange(0, 128, 0.3),
@@ -130,21 +130,21 @@ void main() {
         Float32List(128),
         Float32List(128),
       ];
-      
+
       plugin.processAudio(inputs, outputs);
-      
+
       // Should produce some output
-      expect(outputs[0].any((sample) => sample != 0.0), isTrue);
-      expect(outputs[1].any((sample) => sample != 0.0), isTrue);
+      expect(outputs[0], everyElement(0.25));
+      expect(outputs[1], everyElement(closeTo(0.15, 1e-8)));
     });
   });
-  
+
   group('DartEchoFactory', () {
     test('creates plugin instances', () {
       final plugin = DartEchoFactory.createInstance();
       expect(plugin, isA<DartEchoPlugin>());
     });
-    
+
     test('provides class info', () {
       final info = DartEchoFactory.getClassInfo();
       expect(info['name'], equals('Echo'));

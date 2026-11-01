@@ -9,6 +9,9 @@
 
 #define CONCAT_INNER(a, b) a##_##b
 #define CONCAT(a, b) CONCAT_INNER(a, b)
+#ifndef PLUGIN_TARGET_NAME
+#error PLUGIN_TARGET_NAME is required for module-specific Objective-C class names
+#endif
 #ifdef PLUGIN_TARGET_NAME
 #define Vst3FlippedView CONCAT(Vst3FlippedView, PLUGIN_TARGET_NAME)
 #define Vst3PluginEditorDelegate CONCAT(Vst3PluginEditorDelegate, PLUGIN_TARGET_NAME)

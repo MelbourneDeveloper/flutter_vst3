@@ -1,3 +1,4 @@
+import 'package:flutter_vst3/flutter_vst3.dart';
 import 'dart:typed_data';
 import '../flutter_reverb_parameters.dart';
 
@@ -54,7 +55,7 @@ class AllpassFilter {
 }
 
 /// Pure Dart reverb processor using Freeverb algorithm
-class ReverbProcessor {
+class ReverbProcessor implements Vst3WorkerProcessor {
   static const int _kNumCombs = 8;
   static const int _kNumAllpass = 4;
   
@@ -138,7 +139,7 @@ class ReverbProcessor {
                     Float32List outputL, Float32List outputR) {
     if (!_initialized || inputL.length != inputR.length ||
         outputL.length != inputL.length || outputR.length != inputL.length) {
-      return;
+      throw StateError("Reverb is uninitialized or buffer lengths differ");
     }
     
     for (int i = 0; i < inputL.length; i++) {

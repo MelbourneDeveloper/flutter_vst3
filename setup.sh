@@ -1,59 +1,31 @@
-#!/bin/bash
-
-set -e
-
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")"
 echo 'Setting up development environment...'
 
-# Check and install dependencies on macOS
-if [ "$(uname)" = "Darwin" ]; then
-    echo 'Checking dependencies for macOS...'
-    
-    # Check if Homebrew is installed
-    if ! command -v brew &> /dev/null; then
-        echo 'Installing Homebrew...'
-        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-    fi
-    
-    # Check and install cmake
-    if ! command -v cmake &> /dev/null; then
-        echo 'Installing cmake...'
+if [ "$(uname)" = Darwin ]; then
+    if ! command -v cmake >/dev/null; then
+        command -v brew >/dev/null
         brew install cmake
-    else
-        echo 'cmake already installed'
     fi
-    
-    # Check and install make (part of Xcode command line tools)
-    if ! command -v make &> /dev/null; then
-        echo 'Installing Xcode command line tools...'
+    if ! command -v make >/dev/null; then
         xcode-select --install
-        echo 'Please complete the Xcode command line tools installation and run this script again.'
+        echo 'Complete the Xcode command line tools installation, then rerun setup.' >&2
         exit 1
-    else
-        echo 'make already installed'
     fi
 fi
 
-# Download and extract VST3 SDK if not present
 if [ ! -d vst3sdk ]; then
-    echo 'Downloading VST3 SDK...'
-    curl -L -o vst3sdk.zip https://www.steinberg.net/vst3sdk
+    curl -fL -o vst3sdk.zip https://www.steinberg.net/vst3sdk
     unzip -q vst3sdk.zip
     if [ -d VST_SDK/vst3sdk ]; then
         mv VST_SDK/vst3sdk .
         rm -rf VST_SDK
     fi
-    rm -f vst3sdk.zip
-    find vst3sdk -name "*.sh" -exec chmod +x {} + 2>/dev/null || true
-    echo 'VST3 SDK downloaded and extracted.'
-else
-    echo 'VST3 SDK already exists, skipping download.'
+    test -d vst3sdk
+    find vst3sdk -name '*.sh' -exec chmod +x {} +
+    rm vst3sdk.zip
 fi
-
-# Set VST3_SDK_DIR environment variable
-export VST3_SDK_DIR="$(pwd)/vst3sdk"
-
-# Build native libraries (host and graph)
-echo 'Building native libraries...'
+export VST3_SDK_DIR="$PWD/vst3sdk"
 make native
-
 echo 'Setup complete! Native libraries built and ready for development.'

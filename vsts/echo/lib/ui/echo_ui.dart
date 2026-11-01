@@ -1,12 +1,10 @@
 /// Flutter UI for Echo VST3 plugin
-/// This runs in the SAME process/isolate as the audio processing
 library;
 
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_vst3/ui.dart';
 import '../src/echo_parameters.dart';
-
 
 /// Main UI screen for the Echo VST3 plugin.
 class EchoUI extends StatefulWidget {
@@ -18,63 +16,39 @@ class EchoUI extends StatefulWidget {
 
 class _EchoUIState extends State<EchoUI> {
   final VST3ParameterBinding _binding = VST3ParameterBinding.getInstance();
-  
+
   @override
   void initState() {
     super.initState();
     _binding.addListener(_onParametersChanged);
     _binding.loadInitialParameters();
   }
-  
+
   @override
   void dispose() {
     _binding.removeListener(_onParametersChanged);
     super.dispose();
   }
-  
+
   void _onParametersChanged() {
     setState(() {});
   }
-  
+
   Widget _buildParameterSlider(int paramId, String label) {
     final value = _binding.getParameter(paramId);
-    final units = _binding.getParameterUnits(paramId);
-    
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                label,
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              Text(
-                '${(value * 100).toStringAsFixed(1)}$units',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Slider(
-            value: value,
-            onChanged: (newValue) {
-              _binding.setParameter(paramId, newValue);
-            },
-            activeColor: Theme.of(context).colorScheme.primary,
-            inactiveColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-          ),
-        ],
-      ),
+    return RotaryKnob(
+      label: label,
+      value: value,
+      display: formatEchoParameter(paramId, value),
+      onChangeStart: () => _binding.beginEdit(paramId),
+      onChanged: (value) => _binding.setParameter(paramId, value),
+      onChangeEnd: () => _binding.endEdit(paramId),
     );
   }
-  
+
   Widget _buildBypassToggle() {
     final isBypassed = _binding.getParameter(EchoParameters.kBypassParam) > 0.5;
-    
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
       child: Row(
@@ -86,11 +60,13 @@ class _EchoUIState extends State<EchoUI> {
           ),
           Switch(
             value: isBypassed,
-            onChanged: (value) {
-              _binding.setParameter(
+            onChanged: (value) async {
+              await _binding.beginEdit(EchoParameters.kBypassParam);
+              await _binding.setParameter(
                 EchoParameters.kBypassParam,
                 value ? 1.0 : 0.0,
               );
+              await _binding.endEdit(EchoParameters.kBypassParam);
             },
             activeThumbColor: Theme.of(context).colorScheme.primary,
           ),
@@ -99,7 +75,6 @@ class _EchoUIState extends State<EchoUI> {
     );
   }
 
-  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -113,6 +88,7 @@ class _EchoUIState extends State<EchoUI> {
         children: [
           Expanded(
             child: SingleChildScrollView(
+              physics: const NeverScrollableScrollPhysics(),
               child: Center(
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 600),
@@ -127,17 +103,22 @@ class _EchoUIState extends State<EchoUI> {
                           style: Theme.of(context).textTheme.headlineMedium,
                         ),
                         const SizedBox(height: 32),
-                        _buildParameterSlider(
-                          EchoParameters.kDelayTimeParam,
-                          'Delay Time',
-                        ),
-                        _buildParameterSlider(
-                          EchoParameters.kFeedbackParam,
-                          'Feedback',
-                        ),
-                        _buildParameterSlider(
-                          EchoParameters.kMixParam,
-                          'Mix',
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            _buildParameterSlider(
+                              EchoParameters.kDelayTimeParam,
+                              'Delay Time',
+                            ),
+                            _buildParameterSlider(
+                              EchoParameters.kFeedbackParam,
+                              'Feedback',
+                            ),
+                            _buildParameterSlider(
+                              EchoParameters.kMixParam,
+                              'Mix',
+                            ),
+                          ],
                         ),
                         const Divider(height: 32),
                         _buildBypassToggle(),
@@ -176,17 +157,20 @@ class _EchoWaveformVisualizerState extends State<EchoWaveformVisualizer> {
   Vst3AudioBufferReader? _reader;
   List<double> _samples = const [];
   bool _fetchingReader = false;
+  bool _attached = true;
 
   @override
   void initState() {
     super.initState();
     _initReader();
-    _timer = Timer.periodic(const Duration(milliseconds: 33), (_) => _pollWaveform());
+    _timer = Timer.periodic(
+        const Duration(milliseconds: 33), (_) => _pollWaveform());
     VST3ParameterBinding.getInstance().addListener(_onBindingUpdated);
   }
 
   void _onBindingUpdated() {
     if (!VST3ParameterBinding.getInstance().isHostAttached) {
+      _attached = false;
       _reader = null;
       if (mounted && _samples.isNotEmpty) {
         setState(() {
@@ -195,7 +179,9 @@ class _EchoWaveformVisualizerState extends State<EchoWaveformVisualizer> {
       }
       return;
     }
-    _initReader();
+    final attached = VST3ParameterBinding.getInstance().isHostAttached;
+    attached && !_attached ? _initReader() : null;
+    _attached = attached;
   }
 
   void _initReader() async {
@@ -203,7 +189,8 @@ class _EchoWaveformVisualizerState extends State<EchoWaveformVisualizer> {
     if (_fetchingReader) return;
     _fetchingReader = true;
     try {
-      final reader = await VST3ParameterBinding.getInstance().getAudioBufferReader(forceRefresh: true);
+      final reader = await VST3ParameterBinding.getInstance()
+          .getAudioBufferReader(forceRefresh: true);
       if (mounted) {
         _reader = (reader != null && reader.isValid) ? reader : null;
       }
@@ -215,23 +202,15 @@ class _EchoWaveformVisualizerState extends State<EchoWaveformVisualizer> {
   void _pollWaveform() {
     if (!VST3ParameterBinding.getInstance().isHostAttached) return;
     final reader = _reader;
-    if (reader == null) {
+    if (reader == null) return;
+    if (!reader.isValid || !mounted) {
+      _reader = null;
       _initReader();
       return;
     }
-    if (!reader.isValid || !mounted) {
-      _reader = null;
-      return;
-    }
-    try {
-      final samples = reader.getLatestOutputSamples(maxCount: 256);
-      if (samples.isNotEmpty && mounted) {
-        setState(() {
-          _samples = samples;
-        });
-      }
-    } catch (_) {
-      _reader = null;
+    final samples = reader.getLatestOutputSamples(maxCount: 256);
+    if (mounted) {
+      setState(() => _samples = samples);
     }
   }
 
@@ -297,27 +276,9 @@ class _EchoWaveformPainter extends CustomPainter {
         );
         return;
       case false:
-        final path = _buildPath(size);
+        final path = buildEchoWaveformPath(samples, size);
         _renderPath(canvas, path);
     }
-  }
-
-  Path _buildPath(Size size) {
-    final path = Path();
-    final slice = size.width / (samples.length - 1);
-    final centerY = size.height / 2;
-
-    for (var i = 0; i < samples.length; i++) {
-      final x = i * slice;
-      final y = centerY - (samples[i].clamp(-1.0, 1.0) * (size.height * 0.44));
-      switch (i == 0) {
-        case true:
-          path.moveTo(x, y);
-        case false:
-          path.lineTo(x, y);
-      }
-    }
-    return path;
   }
 
   void _renderPath(Canvas canvas, Path path) {
@@ -335,7 +296,31 @@ class _EchoWaveformPainter extends CustomPainter {
     canvas.drawPath(path, line);
   }
 
-
   @override
   bool shouldRepaint(covariant _EchoWaveformPainter oldDelegate) => true;
 }
+
+/// Builds a finite waveform path, including empty and single-sample blocks.
+Path buildEchoWaveformPath(List<double> samples, Size size) {
+  final path = Path();
+  final slice = samples.length < 2 ? 0.0 : size.width / (samples.length - 1);
+  final centerY = size.height / 2;
+
+  for (var i = 0; i < samples.length; i++) {
+    final x = i * slice;
+    final y = centerY - (samples[i].clamp(-1.0, 1.0) * (size.height * 0.44));
+    switch (i == 0) {
+      case true:
+        path.moveTo(x, y);
+      case false:
+        path.lineTo(x, y);
+    }
+  }
+  return path;
+}
+
+/// Formats normalized Echo parameters in their physical units.
+String formatEchoParameter(int id, double value) =>
+    id == EchoParameters.kDelayTimeParam
+        ? '${(value * 1000).toStringAsFixed(1)}ms'
+        : '${(value * 100).toStringAsFixed(1)}%';

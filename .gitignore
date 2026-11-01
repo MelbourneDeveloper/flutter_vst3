@@ -22,3 +22,10 @@ vst_plugins/
 
 
 .deslop-cache/
+
+# Compiled DSP workers and generated Flutter machine configuration
+vsts/*/*_processor
+vsts/*/*_processor.exe
+vsts/*/macos/Flutter/ephemeral/
+
+vsts/echo/macos/Flutter/ephemeral/

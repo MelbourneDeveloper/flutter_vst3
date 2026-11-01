@@ -1,5 +1,6 @@
 {
   "pluginName": "Echo",
+  "flutterEntrypoint": "echoMain",
   "vendor": "CF",
   "version": "1.0.0",
   "category": "Fx|Delay",

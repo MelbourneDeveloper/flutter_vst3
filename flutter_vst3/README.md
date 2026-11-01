@@ -50,22 +50,9 @@ abstract class VST3Processor {
 }
 ```
 
-### VST3Bridge
+### Audio worker
 
-Main bridge for Flutter UI ↔ VST® host communication:
-
-```dart
-class VST3Bridge {
-  // Register your processor
-  static void registerProcessor(VST3Processor processor);
-  
-  // Initialize processor (called from C++ layer)
-  static void initializeProcessor(double sampleRate, int maxBlockSize);
-  
-  // Process audio (called from C++ layer)
-  static void processStereoCallback(/* FFI parameters */);
-}
-```
+Use Vst3SharedMemoryProcessor in a headless Dart executable.
 
 ## Examples
 
@@ -81,6 +68,10 @@ See the complete example plugins in the main repository:
 - Steinberg VST® 3 SDK
 - C++17 compiler
 - Linux: X11 backend required for VST3 plugin GUI (launch with `GDK_BACKEND=x11 flutter run`)
+
+## Linux editor entrypoint
+
+On Linux the plugin's `main` is the Flutter UI entrypoint because the public Flutter Linux API cannot select a named entrypoint. `main` and `flutterEntrypoint` must start the same UI. Plugins without `flutterEntrypoint` use native sliders.
 
 ## Legal Notice
 

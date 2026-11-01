@@ -2,29 +2,8 @@ import 'dart:ffi';
 import 'dart:io';
 import 'package:ffi/ffi.dart';
 
-/// Magic constant identifying valid VST3 shared memory ('VST3').
-const int _vst3ShmMagic = 0x56535433;
-
-/// Command from host to process an audio block.
-const int _vst3CmdProcess = 1;
-
-/// Command from host requesting the DSP process to terminate cleanly.
-const int _vst3CmdTerminate = 2;
-
-// Memory byte offsets matching the C++ Vst3SharedMemory struct definition
-const int _offsetMagic = 0;
-const int _offsetSampleRate = 8;
-const int _offsetMaxBlockSize = 16;
-const int _offsetCommand = 20;
-const int _offsetNumSamples = 24;
-const int _offsetHostParamWrite = 28;
-const int _offsetHostParamRead = 32;
-const int _offsetHostParams = 36;
-const int _offsetInputL = 4096;
-const int _offsetInputR = 20480;
-const int _offsetOutputL = 36864;
-const int _offsetOutputR = 53248;
-const int _vst3ShmTotalSize = 69632;
+import 'vst3_shm_layout.dart';
+import 'vst3_worker_loop.dart';
 
 // C and Dart function signatures for POSIX shared memory and semaphores
 typedef _ShmOpenC = Int32 Function(Pointer<Utf8>, Int32, Uint16);
@@ -66,15 +45,16 @@ final class _PosixNative {
         semClose = lib.lookupFunction<_SemCloseC, _SemCloseDart>('sem_close');
 }
 
-/// Generic IPC interface unifying Win32 and POSIX shared memory implementations.
-abstract interface class _Vst3Ipc {
-  Pointer<Void> get pointer;
-  void waitReady();
-  void signalDone();
-  void dispose();
+/// Library providing the POSIX IPC symbols. Before glibc 2.34 they live outside
+/// libc, where a Dart executable may not have loaded them yet.
+DynamicLibrary _posixLibrary() {
+  final process = DynamicLibrary.process();
+  return process.providesSymbol('shm_open') && process.providesSymbol('sem_open')
+      ? process
+      : DynamicLibrary.open('librt.so.1');
 }
 
-final class _PosixIpc implements _Vst3Ipc {
+final class _PosixIpc implements Vst3Ipc {
   final Pointer<Void> _ptr;
   final int _fd;
   final Pointer<Void> _semReady;
@@ -96,12 +76,12 @@ final class _PosixIpc implements _Vst3Ipc {
   void dispose() {
     _native.semClose(_semReady);
     _native.semClose(_semDone);
-    _native.munmap(_ptr, _vst3ShmTotalSize);
+    _native.munmap(_ptr, vst3ShmTotalSize);
     _native.close(_fd);
   }
 }
 
-final class _Win32Ipc implements _Vst3Ipc {
+final class _Win32Ipc implements Vst3Ipc {
   final Pointer<Void> _hMap;
   final Pointer<Void> _ptr;
   final Pointer<Void> _hSemReady;
@@ -152,8 +132,20 @@ final class _Win32Ipc implements _Vst3Ipc {
   }
 }
 
+/// Throws if [ptr] is mmap's failure value, which is -1 and not null.
+void throwIfMapFailed(Pointer<Void> ptr, String name) => ptr.address == -1
+    ? throw StateError('Failed to mmap shared memory: $name')
+    : null;
+
+/// Throws if [sem] is a sem_open failure value, which is null on Linux and -1
+/// on some other POSIX systems.
+void throwIfSemFailed(Pointer<Void> sem, String name) =>
+    sem.address == 0 || sem.address == -1
+        ? throw StateError('Failed to open semaphore: $name')
+        : null;
+
 _PosixIpc _openPosixIpc(String shmName, String semReadyName, String semDoneName) {
-  final posix = _PosixNative(DynamicLibrary.process());
+  final posix = _PosixNative(_posixLibrary());
   final shmNameNative = shmName.toNativeUtf8();
   final semRNameNative = semReadyName.toNativeUtf8();
   final semDNameNative = semDoneName.toNativeUtf8();
@@ -162,14 +154,13 @@ _PosixIpc _openPosixIpc(String shmName, String semReadyName, String semDoneName)
     final fd = posix.shmOpen(shmNameNative, 2, 0); // O_RDWR = 2
     if (fd < 0) throw StateError('Failed to open shared memory: $shmName');
 
-    final ptr = posix.mmap(nullptr, _vst3ShmTotalSize, 3, 1, fd, 0);
-    if (ptr == nullptr) {
-      posix.close(fd);
-      throw StateError('Failed to mmap shared memory: $shmName');
-    }
+    final ptr = posix.mmap(nullptr, vst3ShmTotalSize, 3, 1, fd, 0);
+    throwIfMapFailed(ptr, shmName);
 
     final semReady = posix.semOpen(semRNameNative, 0);
+    throwIfSemFailed(semReady, semReadyName);
     final semDone = posix.semOpen(semDNameNative, 0);
+    throwIfSemFailed(semDone, semDoneName);
 
     return _PosixIpc(ptr, fd, semReady, semDone, posix);
   } finally {
@@ -212,7 +203,7 @@ _Win32Ipc _openWin32Ipc(String shmName, String semReadyName, String semDoneName)
     if (hMap == nullptr) {
       throw StateError('Failed to open Win32 shared memory: $shmName');
     }
-    final ptr = mapViewOfFile(hMap, 0x000F001F, 0, 0, _vst3ShmTotalSize);
+    final ptr = mapViewOfFile(hMap, 0x000F001F, 0, 0, vst3ShmTotalSize);
     if (ptr == nullptr) {
       closeHandle(hMap);
       throw StateError('Failed to map Win32 shared memory: $shmName');
@@ -248,110 +239,56 @@ _Win32Ipc _openWin32Ipc(String shmName, String semReadyName, String semDoneName)
   }
 }
 
-/// Runs a VST3 audio processor using preallocated zero-copy shared memory.
+/// Runs [processor] as the DSP worker for one plugin instance.
+///
+/// [args] are the shared memory name, the two semaphore names and the process
+/// id of the host. Blocks until the host terminates the worker, then exits.
 void runVst3SharedMemoryProcessor({
   required List<String> args,
-  required dynamic processor,
+  required Vst3WorkerProcessor processor,
 }) {
-  switch (args.length >= 3) {
-    case true:
-      _startProcessing(args[0], args[1], args[2], processor);
-    case false:
+  switch (args.length) {
+    case 4:
+      final Vst3Ipc ipc = Platform.isWindows
+          ? _openWin32Ipc(args[0], args[1], args[2])
+          : _openPosixIpc(args[0], args[1], args[2]);
+      runWorker(ipc, processor, _exitWhenHostDies, int.parse(args[3]));
+    default:
       throw ArgumentError(
-        'Usage: processor <shm_name> <sem_ready_name> <sem_done_name>',
+        'Usage: processor <shm_name> <sem_ready_name> <sem_done_name> <host_pid>',
       );
   }
 }
 
-/// Opens the shared memory and semaphore handles, then starts the event loop.
-void _startProcessing(
-  String shmName,
-  String semReadyName,
-  String semDoneName,
-  dynamic processor,
-) {
-  final _Vst3Ipc ipc = Platform.isWindows
-      ? _openWin32Ipc(shmName, semReadyName, semDoneName)
-      : _openPosixIpc(shmName, semReadyName, semDoneName);
-
-  _validateMagic(ipc.pointer);
-  _runEventLoop(ipc, processor);
-}
-
-/// Verifies that the shared memory block contains the expected VST3 magic word.
-void _validateMagic(Pointer<Void> ptr) {
-  final magic = Pointer<Uint32>.fromAddress(ptr.address + _offsetMagic).value;
-  switch (magic == _vst3ShmMagic) {
+/// Exits this process when the host process is gone, so that a crashed host
+/// can't leave a worker behind on any platform.
+void _exitWhenHostDies(int hostPid) {
+  switch (Platform.isWindows) {
     case true:
-      return;
+      _waitForWindowsProcess(hostPid);
     case false:
-      throw StateError('Invalid VST3 shared memory magic: $magic');
+      _waitForPosixParent(hostPid);
   }
-}
-
-/// Performs initialization handshake with host, enters DSP loop, and cleans up.
-void _runEventLoop(_Vst3Ipc ipc, dynamic processor) {
-  final ptr = ipc.pointer;
-  final sampleRate = Pointer<Double>.fromAddress(ptr.address + _offsetSampleRate).value;
-  final maxBlockSize = Pointer<Uint32>.fromAddress(ptr.address + _offsetMaxBlockSize).value;
-  processor.initialize(sampleRate, maxBlockSize);
-  ipc.signalDone(); // Signal C++ host that initialization is complete
-
-  _processingLoop(ipc, processor);
-  _dispose(ipc, processor);
-}
-
-/// Core audio processing loop waiting on semReady and signaling semDone.
-void _processingLoop(_Vst3Ipc ipc, dynamic processor) {
-  final ptr = ipc.pointer;
-  var running = true;
-  while (running) {
-    ipc.waitReady();
-    final cmd = Pointer<Uint32>.fromAddress(ptr.address + _offsetCommand).value;
-    switch (cmd) {
-      case _vst3CmdProcess:
-        _handleProcessBlock(ptr, processor);
-        ipc.signalDone();
-        break;
-      case _vst3CmdTerminate:
-        running = false;
-        break;
-      default:
-        ipc.signalDone();
-        break;
-    }
-  }
-}
-
-/// Drains parameters from the ring buffer and processes stereo audio in-place.
-void _handleProcessBlock(Pointer<Void> ptr, dynamic processor) {
-  _drainParameters(ptr, processor);
-  final numSamples = Pointer<Int32>.fromAddress(ptr.address + _offsetNumSamples).value;
-  final inL = Pointer<Float>.fromAddress(ptr.address + _offsetInputL).asTypedList(numSamples);
-  final inR = Pointer<Float>.fromAddress(ptr.address + _offsetInputR).asTypedList(numSamples);
-  final outL = Pointer<Float>.fromAddress(ptr.address + _offsetOutputL).asTypedList(numSamples);
-  final outR = Pointer<Float>.fromAddress(ptr.address + _offsetOutputR).asTypedList(numSamples);
-  processor.processStereo(inL, inR, outL, outR);
-}
-
-/// Drains pending parameter automation events from the host lock-free ring buffer.
-void _drainParameters(Pointer<Void> ptr, dynamic processor) {
-  final writeIdx = Pointer<Uint32>.fromAddress(ptr.address + _offsetHostParamWrite).value;
-  var readIdx = Pointer<Uint32>.fromAddress(ptr.address + _offsetHostParamRead).value;
-
-  while (readIdx != writeIdx) {
-    final eventOffset = _offsetHostParams + ((readIdx % 64) * 16);
-    final paramId = Pointer<Int32>.fromAddress(ptr.address + eventOffset).value;
-    final value = Pointer<Double>.fromAddress(ptr.address + eventOffset + 8).value;
-    processor.setParameter(paramId, value);
-    readIdx++;
-  }
-  Pointer<Uint32>.fromAddress(ptr.address + _offsetHostParamRead).value = readIdx;
-}
-
-/// Cleans up shared memory mappings, closes semaphores, and exits process.
-void _dispose(_Vst3Ipc ipc, dynamic processor) {
-  processor.dispose();
-  ipc.dispose();
   exit(0);
+}
+
+void _waitForPosixParent(int hostPid) {
+  final getppid = DynamicLibrary.process()
+      .lookupFunction<Int32 Function(), int Function()>('getppid');
+  while (getppid() == hostPid) {
+    sleep(const Duration(milliseconds: 250));
+  }
+}
+
+void _waitForWindowsProcess(int hostPid) {
+  final k32 = DynamicLibrary.open('kernel32.dll');
+  final openProcess = k32.lookupFunction<
+      Pointer<Void> Function(Uint32, Int32, Uint32),
+      Pointer<Void> Function(int, int, int)>('OpenProcess');
+  final wait = k32.lookupFunction<Uint32 Function(Pointer<Void>, Uint32),
+      int Function(Pointer<Void>, int)>('WaitForSingleObject');
+  const synchronize = 0x00100000;
+  const infinite = 0xFFFFFFFF;
+  final handle = openProcess(synchronize, 0, hostPid);
+  handle == nullptr ? null : wait(handle, infinite);
 }

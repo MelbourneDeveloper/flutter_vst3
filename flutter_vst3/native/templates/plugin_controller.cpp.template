@@ -14,11 +14,19 @@ using namespace Steinberg::Vst;
 
 
 #include "embedded_flutter_view.h"
+#include "view_logic.h"
+#include "pluginterfaces/vst/ivstmessage.h"
+#include <cstring>
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
 
 /// EditController implementation for the {{PLUGIN_NAME}} VST3 plugin.
 /// Manages parameter definitions, state persistence, value formatting,
 /// and bidirectional synchronization with the active GUI view.
-class {{PLUGIN_CLASS_NAME}}Controller : public EditController {
+class {{PLUGIN_CLASS_NAME}}Controller : public EditController, public flutter_vst3::ShmAddressSource {
 public:
     {{PLUGIN_CLASS_NAME}}Controller() = default;
 
@@ -43,12 +51,41 @@ public:
     /// Sets parameter value from DAW host and notifies the active native GUI view.
     tresult PLUGIN_API setParamNormalized(ParamID id, ParamValue value) override {
         tresult result = EditController::setParamNormalized(id, value);
-        if (activeView_) {
+        if (activeView_ && editing_.shouldEcho(id)) {
             activeView_->updateParameter(id, value);
         }
         return result;
     }
 
+
+    uintptr_t sharedMemoryAddress() const override { return shmAddress_; }
+
+    tresult PLUGIN_API notify(IMessage* message) override {
+        if (message && message->getMessageID() &&
+            std::strcmp(message->getMessageID(), "Vst3Shm") == 0) {
+            int64 address = 0, pid = 0;
+            auto* attributes = message->getAttributes();
+            const bool valid = attributes &&
+                attributes->getInt("address", address) == kResultTrue &&
+                attributes->getInt("pid", pid) == kResultTrue;
+#ifdef _WIN32
+            const auto current = GetCurrentProcessId();
+#else
+            const auto current = getpid();
+#endif
+            shmAddress_ = valid ? flutter_vst3::localShmAddress(address, pid, current) : 0;
+            return valid ? kResultTrue : kInvalidArgument;
+        }
+        return EditController::notify(message);
+    }
+
+    tresult PLUGIN_API beginEdit(ParamID id) override {
+        return editing_.begin(id) ? EditController::beginEdit(id) : kResultTrue;
+    }
+
+    tresult PLUGIN_API endEdit(ParamID id) override {
+        return editing_.end(id) ? EditController::endEdit(id) : kResultFalse;
+    }
 
     int32 PLUGIN_API getParameterCount() override {
         return {{PARAMETER_COUNT}};
@@ -108,6 +145,8 @@ private:
     /// Tracks the active native GUI view to push parameter updates.
     /// Cleared automatically by the view when the window is closed.
     IEmbeddedFlutterView* activeView_{nullptr};
+    uintptr_t shmAddress_{0};
+    flutter_vst3::EditState editing_;
 };
 
 

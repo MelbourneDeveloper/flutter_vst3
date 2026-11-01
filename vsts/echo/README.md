@@ -1,16 +1,25 @@
-# echo
+# Echo
 
-A new Flutter project.
+A stereo VST3 delay effect with an embedded Flutter editor. DSP runs in a
+separate worker process connected to the host through shared memory.
 
-## Getting Started
+Parameters from `plugin_metadata.json` (values are normalized 0–1):
 
-This project is a starting point for a Flutter application.
+| Parameter | Meaning | Default |
+|---|---|---|
+| Delay Time | 0–1000 ms | 0.5 (500 ms) |
+| Feedback | 0–100% | 0.3 (30%) |
+| Mix | Dry to wet, 0–100% | 0.5 (50%) |
+| Bypass | Enables bypass | 0 (off) |
 
-A few resources to get you started if this is your first Flutter project:
+From the repository root, with Flutter, CMake, a C++ toolchain and
+`VST3_SDK_DIR` pointing at the Steinberg SDK:
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+```sh
+make echo
+cd vsts/echo
+flutter test
+```
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+The bundle is produced at `vsts/echo/build/VST3/Release/echo.vst3`.
+On Windows use `build.bat echo`. Linux editors require an X11 host environment.

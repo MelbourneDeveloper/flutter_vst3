@@ -4,21 +4,27 @@ import 'echo_parameters.dart';
 
 /// Simple echo/delay effect processor that FAILS HARD without parameters
 class EchoProcessor {
-  static const int _delayBufferSize = 132300; // ~3 seconds at 44.1kHz
+  int _delayBufferSize = 0;
   
-  final Float32List _delayBufferL = Float32List(_delayBufferSize);
-  final Float32List _delayBufferR = Float32List(_delayBufferSize);
+  Float32List _delayBufferL = Float32List(0);
+  Float32List _delayBufferR = Float32List(0);
   int _writeIndex = 0;
   
   double _sampleRate = 44100.0;
   bool _initialized = false;
   double _currentDelaySamples = -1.0;
-  double _smoothCoeff = 0.00075;
+  double _smoothCoeff = 0.0;
 
   /// Initialize the echo processor
   void initialize(double sampleRate, int maxBlockSize) {
     _sampleRate = sampleRate;
-    _smoothCoeff = 1.0 - math.exp(-1.0 / (_sampleRate * 0.03));
+    sampleRate.isFinite && sampleRate > 0 && maxBlockSize > 0
+        ? null : throw ArgumentError("Invalid audio configuration");
+    _smoothCoeff = 1.0 - math.exp(-1.0 / (sampleRate * 0.03));
+    _delayBufferSize = sampleRate.ceil() + 2;
+    _delayBufferL = Float32List(_delayBufferSize);
+    _delayBufferR = Float32List(_delayBufferSize);
+    reset();
     _initialized = true;
   }
 
@@ -42,18 +48,6 @@ class EchoProcessor {
     }
   }
 
-  void _copyBypass(
-    Float32List inL,
-    Float32List inR,
-    Float32List outL,
-    Float32List outR,
-  ) {
-    for (var i = 0; i < inL.length; i++) {
-      outL[i] = inL[i];
-      outR[i] = inR[i];
-    }
-  }
-
   void _processSample(
     double inL,
     double inR,
@@ -72,10 +66,11 @@ class EchoProcessor {
     final frac = pos - i0;
     final i1 = i0 + 1 >= _delayBufferSize ? 0 : i0 + 1;
 
-    final dL = _delayBufferL[i0] + frac * (_delayBufferL[i1] - _delayBufferL[i0]);
-    final dR = _delayBufferR[i0] + frac * (_delayBufferR[i1] - _delayBufferR[i0]);
-    _delayBufferL[_writeIndex] = inL + _softSaturate(dL * feedbackAmt);
-    _delayBufferR[_writeIndex] = inR + _softSaturate(dR * feedbackAmt);
+    // Under one sample of delay there is nothing older to read but the input.
+    final dL = _currentDelaySamples < 1.0 ? inL : _delayBufferL[i0] + frac * (_delayBufferL[i1] - _delayBufferL[i0]);
+    final dR = _currentDelaySamples < 1.0 ? inR : _delayBufferR[i0] + frac * (_delayBufferR[i1] - _delayBufferR[i0]);
+    _delayBufferL[_writeIndex] = inL + softSaturate(dL * feedbackAmt);
+    _delayBufferR[_writeIndex] = inR + softSaturate(dR * feedbackAmt);
     outL[i] = (inL * dry) + (dL * wet) + (dR * wet * 0.1);
     outR[i] = (inR * dry) + (dR * wet) + (dL * wet * 0.1);
     _writeIndex = (_writeIndex + 1) % _delayBufferSize;
@@ -90,42 +85,25 @@ class EchoProcessor {
     EchoParameters parameters,
   ) {
     _validateBuffers(inputL, inputR, outputL, outputR);
-    if (parameters.bypass > 0.5) {
-      _copyBypass(inputL, inputR, outputL, outputR);
-      return;
-    }
-    
-    final delayMs = 10.0 + (parameters.delayTime * 490.0);
-    final targetDelay = (delayMs * _sampleRate / 1000.0)
-        .clamp(1.0, (_delayBufferSize - 2).toDouble());
-    if (_currentDelaySamples < 0) _currentDelaySamples = targetDelay;
-    
+    final targetDelay = parameters.delayTime.clamp(0.0, 1.0) * _sampleRate;
+    _currentDelaySamples = _currentDelaySamples < 0 ? targetDelay : _currentDelaySamples;
     final fb = parameters.feedback * 0.85;
-    final wet = parameters.mix;
-    final dry = 1.0 - parameters.mix;
+    final wet = parameters.bypass > 0.5 ? 0.0 : parameters.mix;
+    final dry = 1.0 - wet;
 
     for (var i = 0; i < inputL.length; i++) {
       _processSample(inputL[i], inputR[i], targetDelay, fb, wet, dry, outputL, outputR, i);
     }
-    _snapshotWaveform(outputL, outputR);
+
   }
 
-  /// Latest audio output samples shared with the GUI visualizer.
-  static final Float32List waveformBuffer = Float32List(256);
-
-  /// Copies downsampled stereo output samples into the waveform buffer.
-  void _snapshotWaveform(Float32List outL, Float32List outR) {
-    final count = outL.length < 256 ? outL.length : 256;
-    for (var i = 0; i < count; i++) {
-      waveformBuffer[i] = (outL[i] + outR[i]) * 0.5;
-    }
-  }
-
-  /// Soft saturation for controlled feedback limiting
-  double _softSaturate(double x) {
-    return x > 1.0 ? 1.0 - (1.0 / (x + 1.0)) :
-           x < -1.0 ? -1.0 + (1.0 / (-x + 1.0)) : x;
-  }
+  /// Unity gain up to a magnitude of 1, then a limit approaching 2. Value and
+  /// slope are both continuous at the threshold.
+  static double softSaturate(double x) => x > 1.0
+      ? 2.0 - 1.0 / x
+      : x < -1.0
+          ? -2.0 - 1.0 / x
+          : x;
 
   /// Reset delay buffers
   void reset() {

@@ -14,15 +14,34 @@
 }
 @end
 
+#define Vst3GestureSlider CONCAT(Vst3GestureSlider, PLUGIN_TARGET_NAME)
+@interface Vst3GestureSlider : NSSlider
+@property(nonatomic, assign) BOOL editing;
+@end
+@implementation Vst3GestureSlider
+- (void)mouseDown:(NSEvent*)event {
+    Vst3PluginEditorDelegate* delegate = (Vst3PluginEditorDelegate*)self.target;
+    auto* controller = delegate.controller;
+    if (!controller) return;
+    self.editing = YES;
+    controller->beginEdit(static_cast<Steinberg::Vst::ParamID>(self.tag));
+    [super mouseDown:event];
+    if (delegate.controller == controller)
+        controller->endEdit(static_cast<Steinberg::Vst::ParamID>(self.tag));
+    self.editing = NO;
+}
+@end
+
 @implementation Vst3PluginEditorDelegate
 - (void)onSliderChanged:(NSSlider*)sender {
     if (!_controller) return;
     auto pid = static_cast<Steinberg::Vst::ParamID>(sender.tag);
     double val = [sender doubleValue];
-    _controller->beginEdit(pid);
+    const BOOL dragging = [(Vst3GestureSlider*)sender editing];
+    if (!dragging) _controller->beginEdit(pid);
     _controller->setParamNormalized(pid, val);
     _controller->performEdit(pid, val);
-    _controller->endEdit(pid);
+    if (!dragging) _controller->endEdit(pid);
     [self refreshLabelForParam:pid value:val slider:sender];
 }
 
@@ -108,7 +127,7 @@ static void buildSingleRow(
     [parent addSubview:valLabel];
     [delegate.valueLabels addObject:valLabel];
 
-    NSSlider* slider = [NSSlider sliderWithValue:val minValue:0.0 maxValue:1.0 target:delegate action:@selector(onSliderChanged:)];
+    NSSlider* slider = [Vst3GestureSlider sliderWithValue:val minValue:0.0 maxValue:1.0 target:delegate action:@selector(onSliderChanged:)];
     slider.frame = NSMakeRect(24, y + 22, width - 48, 20);
     slider.continuous = YES;
     slider.tag = info.id;
@@ -136,7 +155,7 @@ static void buildParameterRows(
 static void buildFooter(NSView* parent) {
     CGFloat w = parent.bounds.size.width;
     CGFloat h = parent.bounds.size.height;
-    NSTextField* footer = [NSTextField labelWithString:@"Preallocated Zero-Copy Shared Memory DSP"];
+    NSTextField* footer = [NSTextField labelWithString:@"Shared Memory DSP"];
     footer.frame = NSMakeRect(24, h - 24, w - 48, 16);
     footer.alignment = NSTextAlignmentCenter;
     footer.font = [NSFont systemFontOfSize:10 weight:NSFontWeightRegular];
