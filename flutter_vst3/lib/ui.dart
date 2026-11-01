@@ -4,4 +4,5 @@ library flutter_vst3_ui;
 
 export 'flutter_vst3.dart';
 export 'src/parameter_binding.dart';
+export 'src/rotary_knob.dart';
 export 'src/shared_memory_reader.dart';

@@ -24,5 +24,7 @@ dependencies:
   ffi: ^2.1.0
 
 dev_dependencies:
+  flutter_test:
+    sdk: flutter
   test: ^1.24.0
   lints: ^4.0.0
