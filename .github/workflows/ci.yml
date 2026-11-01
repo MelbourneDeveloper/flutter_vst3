@@ -165,8 +165,9 @@ jobs:
       - name: Build the plugin
         shell: bash
         run: |
-          cmake -S vsts/echo -B "$RUNNER_TEMP/echo" -G Ninja -DCMAKE_BUILD_TYPE=Release -DSMTG_CREATE_PLUGIN_LINK=OFF
-          cmake --build "$RUNNER_TEMP/echo" --target echo
+          cmake -S vsts/echo -B "$RUNNER_TEMP/echo" -DCMAKE_BUILD_TYPE=Release -DSMTG_CREATE_PLUGIN_LINK=OFF
+          cmake --build "$RUNNER_TEMP/echo" --config Release --target echo
+          find "$RUNNER_TEMP/echo" -path '*echo.vst3/Contents/*' -type f             \( -name echo_processor -o -name echo_processor.exe \) | grep .
 
   native:
     name: host and graph libraries (${{ matrix.os }})

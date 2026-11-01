@@ -20,6 +20,11 @@ string(TOLOWER "${FLUTTER_VST3_BUNDLE_MODE}" FLUTTER_VST3_BUNDLE_MODE_LOWER)
 
 include(${CMAKE_CURRENT_LIST_DIR}/VST3BridgeBundle.cmake)
 
+# Other generators link the plugin outside the bundle that receives its worker.
+if(WIN32 AND NOT CMAKE_GENERATOR MATCHES "Visual Studio")
+    message(FATAL_ERROR "VST3 plugins must use a Visual Studio generator on Windows, not ${CMAKE_GENERATOR}")
+endif()
+
 # Stops the configure if a plugin wants a Flutter editor and path doesn't exist.
 function(flutter_vst3_require_flutter_path path hint)
     if(FLUTTER_VST3_WANTS_FLUTTER AND NOT EXISTS "${path}")
