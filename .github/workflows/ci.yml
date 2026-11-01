@@ -1,0 +1,107 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  flutter-vst3:
+    name: flutter_vst3 analyze
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Resolve dependencies
+        working-directory: flutter_vst3
+        run: dart pub get
+      - name: Analyze
+        working-directory: flutter_vst3
+        run: dart analyze --no-fatal-warnings --no-fatal-infos
+
+  plugin-tests:
+    name: ${{ matrix.plugin }} tests
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        plugin: [echo, flutter_reverb]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Resolve dependencies
+        working-directory: vsts/${{ matrix.plugin }}
+        run: flutter pub get
+      - name: Test
+        working-directory: vsts/${{ matrix.plugin }}
+        run: flutter test
+
+  native:
+    name: native libraries (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    env:
+      VST3_SDK_DIR: ${{ github.workspace }}/vst3sdk
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libx11-dev libx11-xcb-dev libxcb-util-dev libxcb-cursor-dev libxcb-keysyms1-dev libxcb-xkb-dev libxkbcommon-dev libxkbcommon-x11-dev libfontconfig1-dev libcairo2-dev libgtkmm-3.0-dev libsqlite3-dev
+      - name: Download VST3 SDK
+        run: |
+          curl --fail --location --retry 3 -o vst3sdk.zip https://www.steinberg.net/vst3sdk
+          unzip -q vst3sdk.zip
+          if [ -d VST_SDK/vst3sdk ]; then mv VST_SDK/vst3sdk .; fi
+          test -f vst3sdk/CMakeLists.txt
+      - name: Build native libraries
+        run: |
+          for lib in dart_vst_host dart_vst_graph; do
+            cmake -S "$lib/native" -B "$lib/native/build" -DCMAKE_BUILD_TYPE=Release
+            cmake --build "$lib/native/build" --config Release --parallel
+          done
+          for dest in dart_vst_host dart_vst_graph; do
+            cp dart_vst_host/native/build/libdart_vst_host.* "$dest/"
+            cp dart_vst_graph/native/build/libdart_vst_graph.* "$dest/"
+          done
+      - name: Test dart_vst_host
+        working-directory: dart_vst_host
+        run: |
+          dart pub get
+          dart test
+      - name: Test dart_vst_graph
+        working-directory: dart_vst_graph
+        run: |
+          dart pub get
+          dart test
+
+  ci:
+    name: CI
+    if: always()
+    needs: [flutter-vst3, plugin-tests, native]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if any required job failed or was cancelled
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
+      - name: All required jobs succeeded
+        run: echo "All required jobs succeeded."
