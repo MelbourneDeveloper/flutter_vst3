@@ -1,286 +1,443 @@
-// WORKING NATIVE PROCESSOR - NO AOT BULLSHIT!
+// Copyright (c) 2025
+// Zero-Copy Shared Memory Native Processor for {{PLUGIN_NAME}}
+//
+// Architecture Overview:
+// This class acts as the real-time C++ audio bridge between Steinberg's VST3
+// SDK callbacks and the compiled Dart AOT executable (`{{PLUGIN_ID}}_processor`).
+//
+// Key Responsibilities:
+// 1. Shared Memory Management:
+//    Allocates a page-aligned POSIX/Win32 shared memory block
+//    and maps it into process address space.
+// 2. Inter-Process Synchronization:
+//    Opens named semaphores (ready and done).
+// 3. Process Lifecycle:
+//    Locates the bundled Dart executable in the `.vst3` bundle and spawns it.
+//    Performs a 3-second initialization handshake.
+// 4. Real-time Audio Exchange:
+//    Copies audio blocks into shared memory, signals the Dart worker, and waits
+//    for completion with a 50ms safety timeout. If Dart times out, silence is
+//    output to prevent DAW buffer freezing.
+// 5. Thread-safe Parameter Modulation:
+//    Pushes DAW parameter automation into a lock-free circular ring buffer.
+
+#include "vst3_shared_memory.h"
 #include <iostream>
 #include <stdexcept>
 #include <vector>
 #include <cstring>
 #include <thread>
 #include <mutex>
-#include <libgen.h>
-#include <mach-o/dyld.h>
-#include <limits.h>
-#include <cstdlib>
-#include <dlfcn.h>
+#include <chrono>
+#include <algorithm>
+#include <string>
 
 #ifdef _WIN32
     #include <windows.h>
+    #include <process.h>
 #else
+    #include <libgen.h>
+    #include <dlfcn.h>
+    #include <sys/mman.h>
+    #include <semaphore.h>
+    #include <fcntl.h>
     #include <unistd.h>
     #include <sys/wait.h>
+#if defined(__linux__)
+    #include <sys/prctl.h>
+#endif
+    #include <signal.h>
 #endif
 
-constexpr uint8_t CMD_INIT = 0x01;
-constexpr uint8_t CMD_PROCESS = 0x02;
-constexpr uint8_t CMD_SET_PARAM = 0x03;
-constexpr uint8_t CMD_TERMINATE = 0xFF;
-
-// Forward declaration to get address for dladdr
+// Forward declaration to retrieve bundle executable path
 static void dummy_function() {}
 
+/// Native C++ audio processor managing the Dart child process and shared memory IPC.
 class {{PLUGIN_CLASS_NAME}}NativeProcessor {
 private:
-    FILE* to_dart = nullptr;
-    FILE* from_dart = nullptr;
+    std::string shm_name;
+    std::string sem_ready_name;
+    std::string sem_done_name;
+    Vst3SharedMemory* shm = nullptr;
     bool initialized = false;
     std::mutex io_mutex;
     std::string dart_exe_path;
-    
+
 #ifdef _WIN32
-    HANDLE hProcess = NULL;
+    HANDLE hMapFile = NULL;
+    HANDLE sem_ready = NULL;
+    HANDLE sem_done = NULL;
+    HANDLE child_handle = NULL;
 #else
+    int shm_fd = -1;
+    sem_t* sem_ready = nullptr;
+    sem_t* sem_done = nullptr;
     pid_t child_pid = -1;
 #endif
 
+    /// Discovers the absolute directory of the VST3 bundle binary and locates the Dart executable.
     std::string getExecutablePath() {
-        // Use dladdr to get the path of the current shared object (VST3 binary)
+#ifdef _WIN32
+        char path[MAX_PATH];
+        HMODULE hm = NULL;
+        if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | 
+                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                               (LPCSTR)&dummy_function, &hm)) {
+            GetModuleFileNameA(hm, path, sizeof(path));
+            std::string p(path);
+            size_t pos = p.find_last_of("\\/");
+            std::string dir = (pos != std::string::npos) ? p.substr(0, pos) : ".";
+            std::string exe = dir + "/{{PLUGIN_ID}}_processor.exe";
+            DWORD attr = GetFileAttributesA(exe.c_str());
+            if (attr != INVALID_FILE_ATTRIBUTES && !(attr & FILE_ATTRIBUTE_DIRECTORY)) {
+                return exe;
+            }
+            std::string fallback = dir + "/../../../{{PLUGIN_ID}}_processor.exe";
+            attr = GetFileAttributesA(fallback.c_str());
+            if (attr != INVALID_FILE_ATTRIBUTES && !(attr & FILE_ATTRIBUTE_DIRECTORY)) {
+                return fallback;
+            }
+            return exe;
+        }
+        throw std::runtime_error("FAILED TO GET VST3 BINARY PATH!");
+#else
         Dl_info dl_info;
         if (dladdr((void*)&dummy_function, &dl_info) != 0) {
             char* path_copy = strdup(dl_info.dli_fname);
             char* dir = dirname(path_copy);
             std::string dart_path = std::string(dir) + "/{{PLUGIN_ID}}_processor";
-            
-            // fprintf(stderr, "{{PLUGIN_NAME_UPPER}}: VST3 binary at: %s\n", dl_info.dli_fname);
-            // fprintf(stderr, "{{PLUGIN_NAME_UPPER}}: Looking for Dart executable at: %s\n", dart_path.c_str());
-            
             free(path_copy);
             return dart_path;
         }
         throw std::runtime_error("FAILED TO GET VST3 BINARY PATH!");
+#endif
     }
 
 public:
+    /// Initializes shared memory, semaphores, spawns Dart process, and awaits handshake ACK.
     void initialize(double sampleRate, int maxBlockSize) {
         if (initialized) return;
-        
-        // Get path to Dart executable relative to VST3 binary
+
         dart_exe_path = getExecutablePath();
-        
-        // SPAWN THE DART EXECUTABLE
+
+        uintptr_t id = reinterpret_cast<uintptr_t>(this) & 0xFFFF;
+
 #ifdef _WIN32
-        // Windows implementation
-        SECURITY_ATTRIBUTES sa;
-        sa.nLength = sizeof(SECURITY_ATTRIBUTES);
-        sa.bInheritHandle = TRUE;
-        sa.lpSecurityDescriptor = NULL;
-        
-        HANDLE stdin_r, stdin_w, stdout_r, stdout_w;
-        CreatePipe(&stdin_r, &stdin_w, &sa, 0);
-        CreatePipe(&stdout_r, &stdout_w, &sa, 0);
-        SetHandleInformation(stdin_w, HANDLE_FLAG_INHERIT, 0);
-        SetHandleInformation(stdout_r, HANDLE_FLAG_INHERIT, 0);
-        
-        STARTUPINFO si = {0};
-        si.cb = sizeof(STARTUPINFO);
-        si.hStdInput = stdin_r;
-        si.hStdOutput = stdout_w;
-        si.hStdError = stdout_w;
-        si.dwFlags = STARTF_USESTDHANDLES;
-        
+        DWORD pid = GetCurrentProcessId();
+        shm_name = "Local\\vst3_shm_" + std::to_string(pid) + "_" + std::to_string(id);
+        sem_ready_name = "Local\\vst3_r_" + std::to_string(pid) + "_" + std::to_string(id);
+        sem_done_name = "Local\\vst3_d_" + std::to_string(pid) + "_" + std::to_string(id);
+
+        hMapFile = CreateFileMappingA(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, VST3_SHM_TOTAL_SIZE, shm_name.c_str());
+        if (!hMapFile) {
+            throw std::runtime_error("FAILED TO CREATE WIN32 SHARED MEMORY: " + shm_name);
+        }
+        shm = reinterpret_cast<Vst3SharedMemory*>(MapViewOfFile(hMapFile, FILE_MAP_ALL_ACCESS, 0, 0, VST3_SHM_TOTAL_SIZE));
+        if (!shm) {
+            CloseHandle(hMapFile);
+            hMapFile = NULL;
+            throw std::runtime_error("FAILED TO MAP VIEW OF WIN32 SHARED MEMORY");
+        }
+
+        memset(shm, 0, VST3_SHM_TOTAL_SIZE);
+        shm->magic = VST3_SHM_MAGIC;
+        shm->version = VST3_SHM_VERSION;
+        shm->sampleRate = sampleRate;
+        shm->maxBlockSize = maxBlockSize;
+        shm->command = VST3_CMD_IDLE;
+        vst3_set_active_shm(shm_name.c_str(), shm);
+
+        sem_ready = CreateSemaphoreA(NULL, 0, 1000, sem_ready_name.c_str());
+        sem_done = CreateSemaphoreA(NULL, 0, 1000, sem_done_name.c_str());
+        if (!sem_ready || !sem_done) {
+            throw std::runtime_error("FAILED TO CREATE WIN32 SEMAPHORES");
+        }
+
+        STARTUPINFOA si;
         PROCESS_INFORMATION pi;
-        if (!CreateProcess("{{PLUGIN_ID}}_processor.exe", NULL, NULL, NULL, 
-                          TRUE, 0, NULL, NULL, &si, &pi)) {
-            throw std::runtime_error("FAILED TO START {{PLUGIN_ID}}_processor.exe!");
+        ZeroMemory(&si, sizeof(si));
+        si.cb = sizeof(si);
+        ZeroMemory(&pi, sizeof(pi));
+
+        std::string cmd = "\"" + dart_exe_path + "\" \"" + shm_name + "\" \"" + sem_ready_name + "\" \"" + sem_done_name + "\"";
+        std::vector<char> cmdBuf(cmd.begin(), cmd.end());
+        cmdBuf.push_back('\0');
+
+        if (!CreateProcessA(NULL, cmdBuf.data(), NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
+            throw std::runtime_error("FAILED TO SPAWN DART PROCESS: " + dart_exe_path);
         }
-        
-        hProcess = pi.hProcess;
+        child_handle = pi.hProcess;
         CloseHandle(pi.hThread);
-        CloseHandle(stdin_r);
-        CloseHandle(stdout_w);
-        
-        to_dart = _fdopen(_open_osfhandle((intptr_t)stdin_w, 0), "wb");
-        from_dart = _fdopen(_open_osfhandle((intptr_t)stdout_r, 0), "rb");
-#else
-        // Unix implementation with bidirectional pipe
-        int to_child[2], from_child[2];
-        if (pipe(to_child) == -1 || pipe(from_child) == -1) {
-            throw std::runtime_error("FAILED TO CREATE PIPES!");
+
+        bool acked = false;
+        for (int i = 0; i < 300; ++i) {
+            if (WaitForSingleObject(sem_done, 0) == WAIT_OBJECT_0) {
+                acked = true;
+                break;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
-        
+
+        if (!acked) {
+            throw std::runtime_error("DART PROCESS TIMED OUT DURING INITIALIZATION!");
+        }
+
+        initialized = true;
+#else
+        shm_name = "/vst3_shm_" + std::to_string(getpid()) + "_" + std::to_string(id);
+        sem_ready_name = "/vst3_r_" + std::to_string(getpid()) + "_" + std::to_string(id);
+        sem_done_name = "/vst3_d_" + std::to_string(getpid()) + "_" + std::to_string(id);
+
+        shm_unlink(shm_name.c_str());
+        sem_unlink(sem_ready_name.c_str());
+        sem_unlink(sem_done_name.c_str());
+
+        shm_fd = shm_open(shm_name.c_str(), O_CREAT | O_RDWR, 0666);
+        if (shm_fd < 0) {
+            throw std::runtime_error("FAILED TO CREATE SHARED MEMORY: " + shm_name);
+        }
+        if (ftruncate(shm_fd, VST3_SHM_TOTAL_SIZE) != 0) {
+            throw std::runtime_error("FAILED TO TRUNCATE SHARED MEMORY");
+        }
+        shm = reinterpret_cast<Vst3SharedMemory*>(
+            mmap(NULL, VST3_SHM_TOTAL_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0)
+        );
+        if (shm == MAP_FAILED) {
+            throw std::runtime_error("FAILED TO MMAP SHARED MEMORY");
+        }
+
+        memset(shm, 0, VST3_SHM_TOTAL_SIZE);
+        shm->magic = VST3_SHM_MAGIC;
+        shm->version = VST3_SHM_VERSION;
+        shm->sampleRate = sampleRate;
+        shm->maxBlockSize = maxBlockSize;
+        shm->command = VST3_CMD_IDLE;
+        vst3_set_active_shm(shm_name.c_str(), shm);
+
+        sem_ready = sem_open(sem_ready_name.c_str(), O_CREAT, 0666, 0);
+        sem_done = sem_open(sem_done_name.c_str(), O_CREAT, 0666, 0);
+        if (sem_ready == SEM_FAILED || sem_done == SEM_FAILED) {
+            throw std::runtime_error("FAILED TO CREATE POSIX SEMAPHORES");
+        }
+
         child_pid = fork();
         if (child_pid == -1) {
-            throw std::runtime_error("FAILED TO FORK!");
+            throw std::runtime_error("FAILED TO FORK DART PROCESS!");
         }
-        
+
         if (child_pid == 0) {
-            // Child process
-            dup2(to_child[0], STDIN_FILENO);
-            dup2(from_child[1], STDOUT_FILENO);
-            close(to_child[0]);
-            close(to_child[1]);
-            close(from_child[0]);
-            close(from_child[1]);
-            
-            // fprintf(stderr, "{{PLUGIN_NAME_UPPER}}: Child process executing: %s\n", dart_exe_path.c_str());
-            // fflush(stderr);
-            execl(dart_exe_path.c_str(), "{{PLUGIN_ID}}_processor", nullptr);
-            // fprintf(stderr, "{{PLUGIN_NAME_UPPER}}: exec failed!\n");
-            // fflush(stderr);
-            exit(1); // exec failed
-        }
-        
-        // Parent process
-        close(to_child[0]);
-        close(from_child[1]);
-        to_dart = fdopen(to_child[1], "wb");
-        from_dart = fdopen(from_child[0], "rb");
+#if defined(__linux__)
+            prctl(PR_SET_PDEATHSIG, SIGTERM);
 #endif
-        
-        // Send init command
-        uint8_t init_msg[9];
-        init_msg[0] = CMD_INIT;
-        memcpy(&init_msg[1], &sampleRate, sizeof(double));
-        
-        fwrite(init_msg, 1, 9, to_dart);
-        fflush(to_dart);
-        
-        // Wait for ACK
-        uint8_t ack;
-        if (fread(&ack, 1, 1, from_dart) != 1 || ack != CMD_INIT) {
-            throw std::runtime_error("DART PROCESS FAILED TO INITIALIZE!");
+            execl(dart_exe_path.c_str(), "{{PLUGIN_ID}}_processor",
+                  shm_name.c_str(), sem_ready_name.c_str(), sem_done_name.c_str(), nullptr);
+            exit(1);
         }
-        
+
+        bool acked = false;
+        for (int i = 0; i < 300; ++i) {
+            if (sem_trywait(sem_done) == 0) {
+                acked = true;
+                break;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+
+        if (!acked) {
+            throw std::runtime_error("DART PROCESS TIMED OUT DURING INITIALIZATION!");
+        }
+
         initialized = true;
+#endif
     }
-    
-    void processStereo(float* inputL, float* inputR, 
+
+    /// Renders a stereo audio block by triggering Dart processing over shared memory.
+    void processStereo(float* inputL, float* inputR,
                       float* outputL, float* outputR, int numSamples) {
-        if (!initialized) {
+        if (!initialized || !shm) {
             throw std::runtime_error("NOT INITIALIZED!");
         }
-        
+
         std::lock_guard<std::mutex> lock(io_mutex);
-        
-        // Create message
-        size_t msg_size = 5 + numSamples * 8;
-        std::vector<uint8_t> message(msg_size);
-        
-        message[0] = CMD_PROCESS;
-        memcpy(&message[1], &numSamples, sizeof(int32_t));
-        
-        // Interleave audio
-        float* data = (float*)&message[5];
-        for (int i = 0; i < numSamples; i++) {
-            data[i * 2] = inputL[i];
-            data[i * 2 + 1] = inputR[i];
+        int samplesToProcess = (std::min)(numSamples, static_cast<int>(VST3_SHM_MAX_SAMPLES));
+
+        memcpy(shm->inputL, inputL, samplesToProcess * sizeof(float));
+        memcpy(shm->inputR, inputR, samplesToProcess * sizeof(float));
+        shm->numSamples = samplesToProcess;
+        shm->command = VST3_CMD_PROCESS;
+
+#ifdef _WIN32
+        ReleaseSemaphore(sem_ready, 1, NULL);
+
+        bool done = false;
+        for (int i = 0; i < 500; ++i) {
+            if (WaitForSingleObject(sem_done, 0) == WAIT_OBJECT_0) {
+                done = true;
+                break;
+            }
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
         }
-        
-        // Send to Dart
-        if (fwrite(message.data(), 1, msg_size, to_dart) != msg_size) {
-            throw std::runtime_error("FAILED TO SEND AUDIO TO DART!");
+#else
+        sem_post(sem_ready);
+
+        bool done = false;
+        for (int i = 0; i < 500; ++i) {
+            if (sem_trywait(sem_done) == 0) {
+                done = true;
+                break;
+            }
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
         }
-        fflush(to_dart);
-        
-        // Read response
-        uint8_t response_cmd;
-        if (fread(&response_cmd, 1, 1, from_dart) != 1 || response_cmd != CMD_PROCESS) {
-            throw std::runtime_error("INVALID RESPONSE FROM DART!");
-        }
-        
-        // Read processed audio
-        std::vector<float> processed(numSamples * 2);
-        if (fread(processed.data(), sizeof(float), numSamples * 2, from_dart) != numSamples * 2) {
-            throw std::runtime_error("FAILED TO READ PROCESSED AUDIO!");
-        }
-        
-        // De-interleave
-        for (int i = 0; i < numSamples; i++) {
-            outputL[i] = processed[i * 2];
-            outputR[i] = processed[i * 2 + 1];
+#endif
+
+        if (done) {
+            memcpy(outputL, shm->outputL, samplesToProcess * sizeof(float));
+            memcpy(outputR, shm->outputR, samplesToProcess * sizeof(float));
+        } else {
+            memset(outputL, 0, samplesToProcess * sizeof(float));
+            memset(outputR, 0, samplesToProcess * sizeof(float));
         }
     }
-    
+
+    /// Enqueues a parameter automation event into the shared memory ring buffer.
     void setParameter(int paramId, double value) {
-        if (!initialized) return;
-        
-        uint8_t msg[13];
-        msg[0] = CMD_SET_PARAM;
-        memcpy(&msg[1], &paramId, sizeof(int32_t));
-        memcpy(&msg[5], &value, sizeof(double));
-        
-        fwrite(msg, 1, 13, to_dart);
-        fflush(to_dart);
-        
-        uint8_t ack;
-        fread(&ack, 1, 1, from_dart);
+        if (!initialized || !shm) return;
+        std::lock_guard<std::mutex> lock(io_mutex);
+
+        uint32_t w = shm->hostParamWriteIndex;
+        uint32_t r = shm->hostParamReadIndex;
+        if (w - r < VST3_SHM_PARAM_QUEUE_SIZE) {
+            uint32_t slot = w % VST3_SHM_PARAM_QUEUE_SIZE;
+            shm->hostParams[slot].paramId = paramId;
+            shm->hostParams[slot].value = value;
+            shm->hostParamWriteIndex = w + 1;
+        }
     }
-    
-    void reset() {
-        // Implemented if needed
-    }
-    
+
+    void reset() {}
+
+    /// Shuts down the Dart process, unlinks shared memory and semaphores, and frees resources.
     void dispose() {
         if (!initialized) return;
-        
-        uint8_t term = CMD_TERMINATE;
-        fwrite(&term, 1, 1, to_dart);
-        fflush(to_dart);
-        
-        fclose(to_dart);
-        fclose(from_dart);
-        
+
+        if (shm) {
+            vst3_set_active_shm(nullptr, nullptr);
+            shm->command = VST3_CMD_TERMINATE;
 #ifdef _WIN32
-        WaitForSingleObject(hProcess, 5000);
-        CloseHandle(hProcess);
+            if (sem_ready) ReleaseSemaphore(sem_ready, 1, NULL);
+            UnmapViewOfFile(shm);
+            shm = nullptr;
 #else
-        int status;
-        waitpid(child_pid, &status, 0);
+            sem_post(sem_ready);
+            shm->magic = 0;
+            mmap(shm, VST3_SHM_TOTAL_SIZE, PROT_READ | PROT_WRITE,
+                 MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
+            shm = nullptr;
 #endif
-        
+        }
+
+#ifdef _WIN32
+        if (hMapFile) {
+            CloseHandle(hMapFile);
+            hMapFile = NULL;
+        }
+        if (sem_ready) {
+            CloseHandle(sem_ready);
+            sem_ready = NULL;
+        }
+        if (sem_done) {
+            CloseHandle(sem_done);
+            sem_done = NULL;
+        }
+        if (child_handle) {
+            WaitForSingleObject(child_handle, 500);
+            TerminateProcess(child_handle, 0);
+            CloseHandle(child_handle);
+            child_handle = NULL;
+        }
+#else
+        if (shm_fd >= 0) {
+            close(shm_fd);
+            shm_unlink(shm_name.c_str());
+            shm_fd = -1;
+        }
+        if (sem_ready) {
+            sem_close(sem_ready);
+            sem_unlink(sem_ready_name.c_str());
+            sem_ready = nullptr;
+        }
+        if (sem_done) {
+            sem_close(sem_done);
+            sem_unlink(sem_done_name.c_str());
+            sem_done = nullptr;
+        }
+        if (child_pid > 0) {
+            kill(child_pid, SIGTERM);
+            int status = 0;
+            bool reaped = false;
+            for (int i = 0; i < 20; ++i) {
+                pid_t res = waitpid(child_pid, &status, WNOHANG);
+                if (res == child_pid) {
+                    reaped = true;
+                    break;
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+            if (!reaped) {
+                kill(child_pid, SIGKILL);
+                waitpid(child_pid, &status, 0);
+            }
+            child_pid = -1;
+        }
+#endif
         initialized = false;
     }
-    
+
     ~{{PLUGIN_CLASS_NAME}}NativeProcessor() {
         dispose();
     }
 };
 
-// Global instance
 static {{PLUGIN_CLASS_NAME}}NativeProcessor* g_processor = nullptr;
 
-// C interface
 extern "C" {
     void {{PLUGIN_ID}}_native_initialize(double sample_rate, int max_block_size) {
         try {
             if (!g_processor) g_processor = new {{PLUGIN_CLASS_NAME}}NativeProcessor();
             g_processor->initialize(sample_rate, max_block_size);
         } catch (const std::exception& e) {
-            fprintf(stderr, "{{PLUGIN_NAME_UPPER}} NATIVE FAILURE: %s\n", e.what());
-            abort(); // FAIL HARD!
+            fprintf(stderr, "[vst3_processor] {{PLUGIN_NAME_UPPER}} NATIVE FAILURE: %s\n", e.what());
         }
     }
-    
+
     void {{PLUGIN_ID}}_native_process_stereo(float* inputL, float* inputR,
                                    float* outputL, float* outputR, int samples) {
+        if (!g_processor) {
+            if (outputL && samples > 0) std::memset(outputL, 0, samples * sizeof(float));
+            if (outputR && samples > 0) std::memset(outputR, 0, samples * sizeof(float));
+            return;
+        }
         try {
-            if (!g_processor) throw std::runtime_error("NOT INITIALIZED!");
             g_processor->processStereo(inputL, inputR, outputL, outputR, samples);
         } catch (const std::exception& e) {
-            fprintf(stderr, "{{PLUGIN_NAME_UPPER}} NATIVE FAILURE: %s\n", e.what());
-            abort(); // FAIL HARD!
+            fprintf(stderr, "[vst3_processor] {{PLUGIN_NAME_UPPER}} process error: %s\n", e.what());
+            if (outputL && samples > 0) std::memset(outputL, 0, samples * sizeof(float));
+            if (outputR && samples > 0) std::memset(outputR, 0, samples * sizeof(float));
         }
     }
-    
+
     void {{PLUGIN_ID}}_native_set_parameter(int param_id, double value) {
         if (g_processor) g_processor->setParameter(param_id, value);
     }
-    
+
     double {{PLUGIN_ID}}_native_get_parameter(int param_id) {
-        return 0.0; // Implement if needed
+        return 0.0;
     }
-    
+
     void {{PLUGIN_ID}}_native_reset() {
         if (g_processor) g_processor->reset();
     }
-    
+
     void {{PLUGIN_ID}}_native_dispose() {
         if (g_processor) {
             g_processor->dispose();

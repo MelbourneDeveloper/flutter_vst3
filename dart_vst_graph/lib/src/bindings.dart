@@ -78,9 +78,18 @@ class GraphBindings {
 /// avoid depending on dart_vst_host from dart_vst_graph.
 DynamicLibrary _openLib({String? path}) {
   if (path != null) return DynamicLibrary.open(path);
-  if (Platform.isMacOS) return DynamicLibrary.open('libdart_vst_host.dylib');
-  if (Platform.isLinux) return DynamicLibrary.open('libdart_vst_host.so');
-  if (Platform.isWindows) return DynamicLibrary.open('dart_vst_host.dll');
+  if (Platform.isMacOS) {
+    try { return DynamicLibrary.open('libdart_vst_graph.dylib'); } catch (_) {}
+    return DynamicLibrary.open('libdart_vst_host.dylib');
+  }
+  if (Platform.isLinux) {
+    try { return DynamicLibrary.open('libdart_vst_graph.so'); } catch (_) {}
+    return DynamicLibrary.open('libdart_vst_host.so');
+  }
+  if (Platform.isWindows) {
+    try { return DynamicLibrary.open('dart_vst_graph.dll'); } catch (_) {}
+    return DynamicLibrary.open('dart_vst_host.dll');
+  }
   throw UnsupportedError('Unsupported platform');
 }
 

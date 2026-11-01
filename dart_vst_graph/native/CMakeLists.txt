@@ -1,6 +1,11 @@
 cmake_minimum_required(VERSION 3.20)
 project(dart_vst_graph LANGUAGES CXX)
 
+# Default to Release for single-config generators (Linux/macOS Makefiles & Ninja)
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
+endif()
+
 # Build the VST audio graph library for connecting and routing VST plugins.
 # When consuming from Dart you will need to load
 # libdart_vst_graph.{so,dylib,dll} from your application.
@@ -10,9 +15,9 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # Use the properly downloaded VST3 SDK
 if(NOT DEFINED ENV{VST3_SDK_DIR})
-  set(VST3_SDK_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../../vst3sdk)
+  set(VST3_SDK_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../vst3sdk)
 else()
-  set(VST3_SDK_DIR $ENV{VST3_SDK_DIR})
+  file(TO_CMAKE_PATH "$ENV{VST3_SDK_DIR}" VST3_SDK_DIR)
 endif()
 
 if(NOT EXISTS ${VST3_SDK_DIR}/CMakeLists.txt)
@@ -89,14 +94,44 @@ elseif(WIN32)
   )
 endif()
 
-target_compile_definitions(dart_vst_graph PRIVATE 
+target_compile_definitions(dart_vst_graph PRIVATE
   DART_VST_HOST_EXPORTS
-  RELEASE=1
+  $<$<CONFIG:Debug>:_DEBUG>
+  $<$<CONFIG:Debug>:DEVELOPMENT=1>
+  $<$<NOT:$<CONFIG:Debug>>:NDEBUG>
+  $<$<NOT:$<CONFIG:Debug>>:RELEASE=1>
 )
 
+if(MSVC)
+  target_compile_options(dart_vst_graph PRIVATE
+    $<$<NOT:$<CONFIG:Debug>>:/O2>
+    $<$<NOT:$<CONFIG:Debug>>:/Oi>
+    $<$<NOT:$<CONFIG:Debug>>:/Ot>
+    $<$<NOT:$<CONFIG:Debug>>:/GF>
+    $<$<NOT:$<CONFIG:Debug>>:/Gy>
+    $<$<NOT:$<CONFIG:Debug>>:/fp:fast>
+  )
+else()
+  target_compile_options(dart_vst_graph PRIVATE
+    $<$<NOT:$<CONFIG:Debug>>:-O3>
+    $<$<NOT:$<CONFIG:Debug>>:-fno-math-errno>
+    $<$<NOT:$<CONFIG:Debug>>:-fno-trapping-math>
+    $<$<NOT:$<CONFIG:Debug>>:-ffp-contract=fast>
+  )
+endif()
+
 # Link dart_vst_host library
-set(DART_VST_HOST_LIB "${CMAKE_CURRENT_SOURCE_DIR}/../../dart_vst_host/native/build/libdart_vst_host.dylib")
-if(EXISTS ${DART_VST_HOST_LIB})
+find_library(DART_VST_HOST_LIB
+  NAMES dart_vst_host libdart_vst_host
+  PATHS
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../dart_vst_host/native/build/Release"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../dart_vst_host/native/build/Debug"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../dart_vst_host/native/build"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../dart_vst_host"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../.."
+  NO_DEFAULT_PATH
+)
+if(DART_VST_HOST_LIB)
   target_link_libraries(dart_vst_graph ${DART_VST_HOST_LIB})
 endif()
 

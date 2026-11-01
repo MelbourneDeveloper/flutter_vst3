@@ -8,5 +8,5 @@
 library flutter_vst3;
 
 export 'src/flutter_vst3_bridge.dart';
-export 'src/flutter_vst3_callbacks.dart';
 export 'src/flutter_vst3_parameters.dart';
+export 'src/vst3_shared_memory_processor.dart';

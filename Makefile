@@ -22,8 +22,24 @@ reverb-vst: reverb
 # Build reverb VST® 3 without installing (explicit build-only target)
 reverb-build-only: reverb
 
+FLUTTER_BUILD_MODE ?= release
+
+# Build Flutter UI bundle for Echo
+echo-flutter:
+	@if [ "$$(uname)" = "Darwin" ]; then \
+		echo "Building Flutter macOS bundle for Echo ($(FLUTTER_BUILD_MODE))..."; \
+		cd vsts/echo && flutter build macos --$(FLUTTER_BUILD_MODE); \
+	elif [ "$$(uname)" = "Linux" ]; then \
+		echo "Building Flutter Linux bundle for Echo ($(FLUTTER_BUILD_MODE))..."; \
+		mkdir -p vsts/echo/build/native_assets/linux; \
+		cd vsts/echo && flutter build linux --$(FLUTTER_BUILD_MODE); \
+	elif echo "$$(uname)" | grep -qiE "mingw|msys|cygwin"; then \
+		echo "Building Flutter Windows bundle for Echo ($(FLUTTER_BUILD_MODE))..."; \
+		cd vsts/echo && flutter build windows --$(FLUTTER_BUILD_MODE); \
+	fi
+
 # Build the Echo VST® 3 plugin  
-echo: echo-deps
+echo: echo-deps echo-flutter
 	@echo "Building Echo VST® 3 plugin..."
 	@mkdir -p vsts/echo/build
 	@cd vsts/echo/build && cmake -DCMAKE_BUILD_TYPE=Release .. && make -j$(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 1)
@@ -67,24 +83,24 @@ native: clean-native
 	@echo "Building dart_vst_host library..."
 	@if [ -d "/workspace" ]; then \
 		mkdir -p /workspace/dart_vst_host/native/build; \
-		cd /workspace/dart_vst_host/native/build && VST3_SDK_DIR=$${VST3_SDK_DIR:-/workspace/vst3sdk} cmake .. && make; \
+		cd /workspace/dart_vst_host/native/build && VST3_SDK_DIR=$${VST3_SDK_DIR:-/workspace/vst3sdk} cmake -DCMAKE_BUILD_TYPE=Release .. && make; \
 		cp /workspace/dart_vst_host/native/build/libdart_vst_host.* /workspace/ 2>/dev/null || true; \
 		cp /workspace/dart_vst_host/native/build/libdart_vst_host.* /workspace/dart_vst_host/ 2>/dev/null || true; \
 	else \
 		mkdir -p dart_vst_host/native/build; \
-		cd dart_vst_host/native/build && VST3_SDK_DIR=$${VST3_SDK_DIR:-$(shell pwd)/vst3sdk} cmake .. && make; \
+		cd dart_vst_host/native/build && VST3_SDK_DIR=$${VST3_SDK_DIR:-$(shell pwd)/vst3sdk} cmake -DCMAKE_BUILD_TYPE=Release .. && make; \
 		cp dart_vst_host/native/build/libdart_vst_host.* . 2>/dev/null || true; \
 		cp dart_vst_host/native/build/libdart_vst_host.* dart_vst_host/ 2>/dev/null || true; \
 	fi
 	@echo "Building dart_vst_graph library..."
 	@if [ -d "/workspace" ]; then \
 		mkdir -p /workspace/dart_vst_graph/native/build; \
-		cd /workspace/dart_vst_graph/native/build && VST3_SDK_DIR=$${VST3_SDK_DIR:-/workspace/vst3sdk} cmake .. && make; \
+		cd /workspace/dart_vst_graph/native/build && VST3_SDK_DIR=$${VST3_SDK_DIR:-/workspace/vst3sdk} cmake -DCMAKE_BUILD_TYPE=Release .. && make; \
 		cp /workspace/dart_vst_graph/native/build/libdart_vst_graph.* /workspace/ 2>/dev/null || true; \
 		cp /workspace/dart_vst_graph/native/build/libdart_vst_graph.* /workspace/dart_vst_graph/ 2>/dev/null || true; \
 	else \
 		mkdir -p dart_vst_graph/native/build; \
-		cd dart_vst_graph/native/build && VST3_SDK_DIR=$${VST3_SDK_DIR:-$(shell pwd)/vst3sdk} cmake .. && make; \
+		cd dart_vst_graph/native/build && VST3_SDK_DIR=$${VST3_SDK_DIR:-$(shell pwd)/vst3sdk} cmake -DCMAKE_BUILD_TYPE=Release .. && make; \
 		cp dart_vst_graph/native/build/libdart_vst_graph.* . 2>/dev/null || true; \
 		cp dart_vst_graph/native/build/libdart_vst_graph.* dart_vst_graph/ 2>/dev/null || true; \
 	fi
@@ -96,7 +112,7 @@ plugin: native clean-plugin
 	@for plugin in vsts/*/; do \
 		if [ -f "$$plugin/CMakeLists.txt" ]; then \
 			echo "Building $$plugin"; \
-			cd "$$plugin" && mkdir -p build && cd build && cmake .. && make && cd ../../../; \
+			cd "$$plugin" && mkdir -p build && cd build && cmake -DCMAKE_BUILD_TYPE=Release .. && make && cd ../../../; \
 		fi; \
 	done
 
@@ -144,17 +160,31 @@ flutter-deps:
 		flutter pub get --directory=flutter_ui; \
 	fi
 
-# Install VST® 3 plugin to system location (macOS/Linux)
-install: reverb-vst
-	@echo "Installing flutter_reverb.vst3..."
+# Install VST® 3 plugins to system location (macOS/Linux)
+install: reverb-vst echo-vst
+	@echo "Installing plugins..."
 	@if [ "$$(uname)" = "Darwin" ]; then \
 		mkdir -p ~/Library/Audio/Plug-Ins/VST3/; \
-		cp -r vsts/flutter_reverb/build/VST3/Release/flutter_reverb.vst3 ~/Library/Audio/Plug-Ins/VST3/; \
-		echo "✅ Installed to ~/Library/Audio/Plug-Ins/VST3/"; \
+		rm -rf ~/Library/Audio/Plug-Ins/VST3/flutter_reverb.vst3; \
+		rm -rf ~/Library/Audio/Plug-Ins/VST3/echo.vst3; \
+		cp -R vsts/flutter_reverb/build/VST3/Release/flutter_reverb.vst3 ~/Library/Audio/Plug-Ins/VST3/; \
+		cp -R vsts/echo/build/VST3/Release/echo.vst3 ~/Library/Audio/Plug-Ins/VST3/; \
+		echo "✅ Installed flutter_reverb.vst3 and echo.vst3 to ~/Library/Audio/Plug-Ins/VST3/"; \
 	elif [ "$$(uname)" = "Linux" ]; then \
 		mkdir -p ~/.vst3/; \
+		rm -rf ~/.vst3/flutter_reverb.vst3; \
+		rm -rf ~/.vst3/echo.vst3; \
 		cp -r vsts/flutter_reverb/build/VST3/Release/flutter_reverb.vst3 ~/.vst3/; \
+		cp -r vsts/echo/build/VST3/Release/echo.vst3 ~/.vst3/; \
 		echo "✅ Installed to ~/.vst3/"; \
+	elif echo "$$(uname)" | grep -qiE "mingw|msys|cygwin"; then \
+		vst3_dest="$${LOCALAPPDATA:-$$HOME/AppData/Local}/Programs/Common/VST3"; \
+		mkdir -p "$$vst3_dest"; \
+		rm -rf "$$vst3_dest/flutter_reverb.vst3"; \
+		rm -rf "$$vst3_dest/echo.vst3"; \
+		cp -r vsts/flutter_reverb/build/VST3/Release/flutter_reverb.vst3 "$$vst3_dest/"; \
+		cp -r vsts/echo/build/VST3/Release/echo.vst3 "$$vst3_dest/"; \
+		echo "✅ Installed to $$vst3_dest/"; \
 	else \
 		echo "⚠️  Manual installation required on this platform"; \
 	fi

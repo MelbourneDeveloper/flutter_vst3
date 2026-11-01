@@ -7,10 +7,10 @@ void main() {
   // directory. On CI or developer machines the library should be
   // built into libdart_vst_host.{so,dylib,dll} alongside the tests.
   final libFile = Platform.isWindows
-      ? File('dart_vst_host.dll')
+      ? (File('dart_vst_graph.dll').existsSync() ? File('dart_vst_graph.dll') : File('dart_vst_host.dll'))
       : Platform.isMacOS
-          ? File('libdart_vst_host.dylib')
-          : File('libdart_vst_host.so');
+          ? (File('libdart_vst_graph.dylib').existsSync() ? File('libdart_vst_graph.dylib') : File('libdart_vst_host.dylib'))
+          : (File('libdart_vst_graph.so').existsSync() ? File('libdart_vst_graph.so') : File('libdart_vst_host.so'));
 
   if (!libFile.existsSync()) {
     throw Exception('Native library ${libFile.path} not found! Build the native library first.');

@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:typed_data';
 import '../lib/flutter_reverb_parameters.dart';
 import '../lib/src/reverb_processor.dart';
 
@@ -72,10 +73,10 @@ void _testReverbProcessor() {
   
   // Test audio processing
   const numSamples = 100;
-  final inputL = List.generate(numSamples, (i) => math.sin(i * 0.1) * 0.5);
-  final inputR = List.generate(numSamples, (i) => math.cos(i * 0.1) * 0.5);
-  final outputL = List<double>.filled(numSamples, 0.0);
-  final outputR = List<double>.filled(numSamples, 0.0);
+  final inputL = Float32List.fromList(List.generate(numSamples, (i) => math.sin(i * 0.1) * 0.5));
+  final inputR = Float32List.fromList(List.generate(numSamples, (i) => math.cos(i * 0.1) * 0.5));
+  final outputL = Float32List(numSamples);
+  final outputR = Float32List(numSamples);
   
   processor.processStereo(inputL, inputR, outputL, outputR);
   
@@ -86,10 +87,10 @@ void _testReverbProcessor() {
   assert(hasNonZeroR, 'Processor should produce non-zero right output');
   
   // Test silence processing (should still work)
-  final silentL = List<double>.filled(numSamples, 0.0);
-  final silentR = List<double>.filled(numSamples, 0.0);
-  final outputSilentL = List<double>.filled(numSamples, 0.0);
-  final outputSilentR = List<double>.filled(numSamples, 0.0);
+  final silentL = Float32List(numSamples);
+  final silentR = Float32List(numSamples);
+  final outputSilentL = Float32List(numSamples);
+  final outputSilentR = Float32List(numSamples);
   
   processor.processStereo(silentL, silentR, outputSilentL, outputSilentR);
   // With silence, output should be very quiet but might not be exactly zero due to reverb tail

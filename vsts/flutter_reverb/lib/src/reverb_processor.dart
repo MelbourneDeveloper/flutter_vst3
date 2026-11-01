@@ -1,14 +1,15 @@
+import 'dart:typed_data';
 import '../flutter_reverb_parameters.dart';
 
 /// Comb filter implementation for reverb
 class CombFilter {
-  final List<double> _buffer;
+  final Float32List _buffer;
   int _bufferIndex = 0;
   double _feedback = 0.5;
   double _dampening = 0.5;
   double _filterStore = 0.0;
 
-  CombFilter(int bufferSize) : _buffer = List.filled(bufferSize, 0.0);
+  CombFilter(int bufferSize) : _buffer = Float32List(bufferSize);
 
   double process(double input) {
     final output = _buffer[_bufferIndex];
@@ -31,11 +32,11 @@ class CombFilter {
 
 /// Allpass filter implementation for reverb
 class AllpassFilter {
-  final List<double> _buffer;
+  final Float32List _buffer;
   int _bufferIndex = 0;
   final double _feedback = 0.5;
 
-  AllpassFilter(int bufferSize) : _buffer = List.filled(bufferSize, 0.0);
+  AllpassFilter(int bufferSize) : _buffer = Float32List(bufferSize);
 
   double process(double input) {
     final bufout = _buffer[_bufferIndex];
@@ -79,41 +80,39 @@ class ReverbProcessor {
 
   void _initializeFilters() {
     final scale = _sampleRate / 44100.0;
-    
+    _clearFilterLists();
+    _initCombFilters(scale);
+    _initAllpassFilters(scale);
+    _updateCombFilterParameters();
+  }
+
+  void _clearFilterLists() {
     _combFiltersL.clear();
     _combFiltersR.clear();
     _allpassFiltersL.clear();
     _allpassFiltersR.clear();
-    
-    // Initialize comb filters
-    for (int i = 0; i < _kNumCombs; i++) {
-      final bufferSizeL = (_combTuning[i] * scale).round();
-      final bufferSizeR = ((_combTuning[i] + 23) * scale).round();
-      
-      _combFiltersL.add(CombFilter(bufferSizeL));
-      _combFiltersR.add(CombFilter(bufferSizeR));
+  }
+
+  void _initCombFilters(double scale) {
+    for (var i = 0; i < _kNumCombs; i++) {
+      _combFiltersL.add(CombFilter((_combTuning[i] * scale).round()));
+      _combFiltersR.add(CombFilter(((_combTuning[i] + 23) * scale).round()));
     }
-    
-    // Initialize allpass filters  
-    for (int i = 0; i < _kNumAllpass; i++) {
-      final bufferSizeL = (_allpassTuning[i] * scale).round();
-      final bufferSizeR = ((_allpassTuning[i] + 23) * scale).round();
-      
-      _allpassFiltersL.add(AllpassFilter(bufferSizeL));
-      _allpassFiltersR.add(AllpassFilter(bufferSizeR));
+  }
+
+  void _initAllpassFilters(double scale) {
+    for (var i = 0; i < _kNumAllpass; i++) {
+      _allpassFiltersL.add(AllpassFilter((_allpassTuning[i] * scale).round()));
+      _allpassFiltersR.add(AllpassFilter(((_allpassTuning[i] + 23) * scale).round()));
     }
-    
-    _updateCombFilterParameters();
   }
 
   void _updateCombFilterParameters() {
     final feedback = _parameters.roomSize * 0.28 + 0.7;
-    
     for (final filter in _combFiltersL) {
       filter.setFeedback(feedback);
       filter.setDampening(_parameters.damping);
     }
-    
     for (final filter in _combFiltersR) {
       filter.setFeedback(feedback);
       filter.setDampening(_parameters.damping);
@@ -123,7 +122,6 @@ class ReverbProcessor {
   /// Set parameter value
   void setParameter(int paramId, double value) {
     _parameters.setParameter(paramId, value);
-    
     if (_initialized && (paramId == ReverbParameters.kRoomSizeParam || 
                         paramId == ReverbParameters.kDampingParam)) {
       _updateCombFilterParameters();
@@ -136,8 +134,8 @@ class ReverbProcessor {
   }
 
   /// Process stereo audio block
-  void processStereo(List<double> inputL, List<double> inputR, 
-                    List<double> outputL, List<double> outputR) {
+  void processStereo(Float32List inputL, Float32List inputR, 
+                    Float32List outputL, Float32List outputR) {
     if (!_initialized || inputL.length != inputR.length ||
         outputL.length != inputL.length || outputR.length != inputL.length) {
       return;
@@ -150,7 +148,6 @@ class ReverbProcessor {
       // Process through comb filters
       double combOutL = 0.0;
       double combOutR = 0.0;
-      
       for (int j = 0; j < _kNumCombs; j++) {
         combOutL += _combFiltersL[j].process(monoIn);
         combOutR += _combFiltersR[j].process(monoIn);

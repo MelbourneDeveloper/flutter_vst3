@@ -43,6 +43,7 @@ if [ ! -d vst3sdk ]; then
         rm -rf VST_SDK
     fi
     rm -f vst3sdk.zip
+    find vst3sdk -name "*.sh" -exec chmod +x {} + 2>/dev/null || true
     echo 'VST3 SDK downloaded and extracted.'
 else
     echo 'VST3 SDK already exists, skipping download.'
@@ -51,22 +52,8 @@ fi
 # Set VST3_SDK_DIR environment variable
 export VST3_SDK_DIR="$(pwd)/vst3sdk"
 
-# Build native library
-echo 'Building native library...'
-mkdir -p native/build
-cd native/build
-cmake ..
-make
+# Build native libraries (host and graph)
+echo 'Building native libraries...'
+make native
 
-# Copy library to project root
-if [ "$(uname)" = "Darwin" ]; then
-    cp libdart_vst_host.dylib ../../
-elif [ "$(uname)" = "Linux" ]; then
-    cp libdart_vst_host.so ../../
-else
-    cp libdart_vst_host.dll ../../
-fi
-
-cd ../..
-
-echo 'Setup complete! Native library built and ready for development.'
+echo 'Setup complete! Native libraries built and ready for development.'

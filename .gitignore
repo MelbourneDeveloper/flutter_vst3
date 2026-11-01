@@ -9,6 +9,8 @@ node_modules/
 *.dll
 *.so
 *.dylib
+*.lib
+*.exp
 *.zip
 .DS_Store
 
@@ -17,3 +19,6 @@ vst3sdk/
 *.wav
 
 vst_plugins/
+
+
+.deslop-cache/

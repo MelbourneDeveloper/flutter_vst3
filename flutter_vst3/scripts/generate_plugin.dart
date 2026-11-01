@@ -131,8 +131,8 @@ Map<String, String> _generateCppSnippets(List<Map<String, dynamic>> parameters, 
       '{{GET_PARAMETER_INFO}}': '        return kResultFalse;',
       '{{NORMALIZE_PARAMETER}}': '        return normalizedValue;',
       '{{DENORMALIZE_PARAMETER}}': '        return plainValue;',
-      '{{STRING_TO_PARAMETER}}': '        return false;',
-      '{{PARAMETER_TO_STRING}}': '        return false;',
+      '{{STRING_TO_PARAMETER}}': '        return EditController::getParamValueByString(id, string, valueNormalized);',
+      '{{PARAMETER_TO_STRING}}': '        return EditController::getParamStringByValue(id, valueNormalized, string);',
     };
   }
   
@@ -145,7 +145,7 @@ Map<String, String> _generateCppSnippets(List<Map<String, dynamic>> parameters, 
   // Generate controller parameter registration
   final controllerInit = parameters.map((p) {
     final title = (p['name'] as String).replaceAll('_', ' ').split(' ').map((word) => word.isEmpty ? '' : word[0].toUpperCase() + word.substring(1)).join(' ');
-    return '    parameters.addParameter(STR16("$title"), STR16("${p['units']}"), 0, ${p['defaultValue']}, ParameterInfo::kCanAutomate, ${p['id']});';
+    return '        parameters.addParameter(STR16("$title"), STR16("${p['units']}"), 0, ${p['defaultValue']}, ParameterInfo::kCanAutomate, ${p['id']});';
   }).join('\n');
   
   // Generate parameter info getter
@@ -177,8 +177,8 @@ Map<String, String> _generateCppSnippets(List<Map<String, dynamic>> parameters, 
     '{{GET_PARAMETER_INFO}}': paramInfoCases + '\n        return kResultFalse;',
     '{{NORMALIZE_PARAMETER}}': '        return normalizedValue; // Identity for now',
     '{{DENORMALIZE_PARAMETER}}': '        return plainValue; // Identity for now',
-    '{{STRING_TO_PARAMETER}}': '        return false; // Not implemented',
-    '{{PARAMETER_TO_STRING}}': '        return false; // Not implemented',
+    '{{STRING_TO_PARAMETER}}': '        return EditController::getParamValueByString(id, string, valueNormalized);',
+    '{{PARAMETER_TO_STRING}}': '        return EditController::getParamStringByValue(id, valueNormalized, string);',
     '{{PARAMETER_STATE_READ}}': parameters.isEmpty ? '        // No parameters to read' : '    int32 bytesRead = 0;\n$stateRead',
     '{{PARAMETER_STATE_WRITE}}': parameters.isEmpty ? '        // No parameters to write' : '    int32 bytesWritten = 0;\n$stateWrite',
   };

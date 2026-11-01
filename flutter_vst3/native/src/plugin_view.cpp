@@ -58,6 +58,10 @@ public:
   tresult PLUGIN_API setFrame(IPlugFrame*) override { return kResultTrue; }
   tresult PLUGIN_API canResize() override { return kResultTrue; }
   tresult PLUGIN_API checkSizeConstraint(ViewRect*) override { return kResultTrue; }
+  tresult PLUGIN_API onWheel(float) override { return kResultTrue; }
+  tresult PLUGIN_API onKeyDown(char16, int16, int16) override { return kResultTrue; }
+  tresult PLUGIN_API onKeyUp(char16, int16, int16) override { return kResultTrue; }
+  tresult PLUGIN_API onFocus(TBool) override { return kResultTrue; }
 
   REFCOUNT_METHODS(FObject)
   tresult PLUGIN_API queryInterface(const TUID iid, void** obj) override {
@@ -79,7 +83,7 @@ private:
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
 #elif defined(__APPLE__)
-    system("open flutter_ui/build/macos/Build/Products/Release/flutter_ui.app");
+    system("cd /Users/christianfindlay/Documents/Code/flutter_vst3/vsts/echo && open build/macos/Build/Products/Release/echo.app");
 #else
     if (!fork()) {
       execl("flutter_ui/build/linux/x64/release/bundle/flutter_ui", "flutter_ui", (char*)NULL);

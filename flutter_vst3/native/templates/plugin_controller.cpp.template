@@ -12,10 +12,23 @@
 using namespace Steinberg;
 using namespace Steinberg::Vst;
 
-// Controller for the {{PLUGIN_NAME}} plugin
+
+#include "embedded_flutter_view.h"
+
+/// EditController implementation for the {{PLUGIN_NAME}} VST3 plugin.
+/// Manages parameter definitions, state persistence, value formatting,
+/// and bidirectional synchronization with the active GUI view.
 class {{PLUGIN_CLASS_NAME}}Controller : public EditController {
 public:
     {{PLUGIN_CLASS_NAME}}Controller() = default;
+
+    /// Cleans up references to the active GUI view when the controller is destroyed.
+    ~{{PLUGIN_CLASS_NAME}}Controller() override {
+        if (activeView_) {
+            activeView_->onControllerClosed();
+            activeView_ = nullptr;
+        }
+    }
     
     tresult PLUGIN_API initialize(FUnknown* context) override {
         tresult result = EditController::initialize(context);
@@ -25,6 +38,20 @@ public:
 {{PARAMETER_CONTROLLER_INIT}}
 
         return kResultTrue;
+    }
+
+    /// Sets parameter value from DAW host and notifies the active native GUI view.
+    tresult PLUGIN_API setParamNormalized(ParamID id, ParamValue value) override {
+        tresult result = EditController::setParamNormalized(id, value);
+        if (activeView_) {
+            activeView_->updateParameter(id, value);
+        }
+        return result;
+    }
+
+
+    int32 PLUGIN_API getParameterCount() override {
+        return {{PARAMETER_COUNT}};
     }
 
     tresult PLUGIN_API setComponentState(IBStream* state) override {
@@ -62,25 +89,27 @@ public:
     // Convert normalized parameter values to display strings
     tresult PLUGIN_API getParamStringByValue(ParamID id, ParamValue valueNormalized, String128 string) override {
 {{PARAMETER_TO_STRING}}
-        return EditController::getParamStringByValue(id, valueNormalized, string);
     }
 
     // Convert display strings to normalized parameter values  
     tresult PLUGIN_API getParamValueByString(ParamID id, TChar* string, ParamValue& valueNormalized) override {
 {{STRING_TO_PARAMETER}}
-        return EditController::getParamValueByString(id, string, valueNormalized);
     }
 
-    // Create view (UI) for the plugin - integrates with Flutter UI
+    /// Instantiates the native plugin GUI window and binds the activeView_ pointer.
     IPlugView* PLUGIN_API createView(FIDString name) override {
-        if (strcmp(name, ViewType::kEditor) == 0) {
-            // TODO: Return Flutter-based UI view
-            // For now, return nullptr to use generic host UI
-            return nullptr;
+        if (name && strcmp(name, ViewType::kEditor) == 0) {
+            return createEmbeddedFlutterView(this, "{{PLUGIN_NAME}}", &activeView_);
         }
         return nullptr;
     }
+
+private:
+    /// Tracks the active native GUI view to push parameter updates.
+    /// Cleared automatically by the view when the window is closed.
+    IEmbeddedFlutterView* activeView_{nullptr};
 };
+
 
 // Factory functions in proper namespace
 namespace Steinberg {

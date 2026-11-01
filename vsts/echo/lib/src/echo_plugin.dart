@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'echo_processor.dart';
 import 'echo_parameters.dart';
 
@@ -108,13 +109,12 @@ class DartEchoPlugin {
   }
 
   /// Process audio block
-  void processAudio(List<List<double>> inputs, List<List<double>> outputs) {
+  void processAudio(List<Float32List> inputs, List<Float32List> outputs) {
     if (!_isActive || inputs.isEmpty || outputs.isEmpty) {
       return;
     }
 
-    // Ensure we have stereo inputs and outputs
-    final inputL = inputs.isNotEmpty ? inputs[0] : <double>[];
+    final inputL = inputs.isNotEmpty ? inputs[0] : Float32List(0);
     final inputR = inputs.length > 1 ? inputs[1] : inputL;
     
     if (outputs.isEmpty) return;
@@ -123,12 +123,9 @@ class DartEchoPlugin {
 
     if (inputL.isEmpty || outputL.isEmpty) return;
 
-    // Process the audio through the echo effect with parameters
     if (_processor == null) {
       throw StateError('CRITICAL PLUGIN FAILURE: EchoProcessor not initialized!');
     }
-    
-    // Use current parameter values (not hardcoded defaults)
     
     _processor!.processStereo(inputL, inputR, outputL, outputR, _parameters);
   }

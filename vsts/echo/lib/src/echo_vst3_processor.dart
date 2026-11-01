@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter_vst3/flutter_vst3.dart';
 import 'echo_processor.dart';
 import 'echo_parameters.dart';
@@ -15,8 +16,8 @@ class EchoVST3Processor extends VST3Processor {
   }
 
   @override
-  void processStereo(List<double> inputL, List<double> inputR,
-                    List<double> outputL, List<double> outputR) {
+  void processStereo(Float32List inputL, Float32List inputR,
+                    Float32List outputL, Float32List outputR) {
     _echoProcessor?.processStereo(inputL, inputR, outputL, outputR, _parameters);
   }
 

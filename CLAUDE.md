@@ -63,7 +63,8 @@ The audio graph supports:
 
 **Setup (First time):**
 ```bash
-./setup.sh  # Downloads Steinberg VST® 3 SDK and builds native library automatically
+./setup.sh   # macOS/Linux: Downloads Steinberg VST® 3 SDK and builds native library automatically
+.\setup.ps1  # Windows (or setup.bat)
 ```
 
 **Primary build targets using Makefile:**
@@ -206,7 +207,7 @@ add_dart_vst3_plugin(flutter_reverb reverb_parameters.dart
 ## Platform-Specific Notes
 
 - **macOS:** Outputs `.dylib` and `.vst3` bundle
-- **Linux:** Outputs `.so` library  
+- **Linux:** Outputs `.so` library; VST3 plugin GUIs standardly use the X11 desktop backend. Launch Flutter apps/hosts with `GDK_BACKEND=x11 flutter run` to display the GUI.
 - **Windows:** Outputs `.dll` library
 - All platforms require VST3 SDK and appropriate build tools
 - Use `make install` to install VST3 plugins to system folders automatically

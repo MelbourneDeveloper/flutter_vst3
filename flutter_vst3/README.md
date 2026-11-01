@@ -80,6 +80,7 @@ See the complete example plugins in the main repository:
 - CMake 3.20+
 - Steinberg VST® 3 SDK
 - C++17 compiler
+- Linux: X11 backend required for VST3 plugin GUI (launch with `GDK_BACKEND=x11 flutter run`)
 
 ## Legal Notice
 
