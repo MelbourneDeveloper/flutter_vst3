@@ -71,6 +71,48 @@ void main() {
     expect(otherUids[1], isNot(firstUids[1]));
   });
 
+  test('H25: a pinned UID is used exactly', () {
+    final metadata = _metadata()
+      ..['processorUid'] = 'F9D0C991074C84044D825FC521E8F92B'
+      ..['controllerUid'] = 'A011573216F065964B9846B6007933D0';
+    expect(_generate(dir, metadata).exitCode, 0);
+    final ids = _generated(dir, 'alpha_ids.h');
+    expect(ids, contains('kAlphaProcessorUID(0xF9D0C991, 0x074C8404, 0x4D825FC5, 0x21E8F92B);'));
+    expect(ids, contains('kAlphaControllerUID(0xA0115732, 0x16F06596, 0x4B9846B6, 0x007933D0);'));
+  });
+
+  test('H25: a bad pinned UID is rejected', () {
+    const good = 'F9D0C991074C84044D825FC521E8F92B';
+    const other = 'A011573216F065964B9846B6007933D0';
+    final cases = <(Map<String, Object>, String)>[
+      ({'processorUid': good}, 'processorUid and controllerUid must be set together'),
+      ({'controllerUid': good}, 'processorUid and controllerUid must be set together'),
+      ({'processorUid': good, 'controllerUid': good}, 'processorUid and controllerUid must differ'),
+      ({'processorUid': 'F9D0', 'controllerUid': other}, 'processorUid must be 32 hex digits'),
+      ({'processorUid': good, 'controllerUid': 'not hex at all, but thirty two!!'}, 'controllerUid must be 32 hex digits'),
+      ({'processorUid': 7, 'controllerUid': other}, 'processorUid must be 32 hex digits'),
+    ];
+    for (final (uids, message) in cases) {
+      final result = _generate(dir, _metadata()..addAll(uids));
+      expect(result.exitCode, isNot(0), reason: '$uids');
+      expect('${result.stdout}', contains(message));
+    }
+  });
+
+  test('H25: Echo keeps its original UIDs, and Reverb has its own', () {
+    Map<String, dynamic> real(String name) =>
+        jsonDecode(File('../vsts/$name/plugin_metadata.json').readAsStringSync())
+            as Map<String, dynamic>;
+    expect(_generate(dir, real('echo')).exitCode, 0);
+    final echo = _generated(dir, 'alpha_ids.h');
+    expect(echo, contains('ProcessorUID(0xF9D0C991, 0x074C8404, 0x4D825FC5, 0x21E8F92B);'));
+    expect(echo, contains('ControllerUID(0xA0115732, 0x16F06596, 0x4B9846B6, 0x007933D0);'));
+    expect(_generate(dir, real('flutter_reverb')).exitCode, 0);
+    final reverb = _generated(dir, 'alpha_ids.h');
+    expect(reverb, isNot(contains('0xF9D0C991, 0x074C8404, 0x4D825FC5, 0x21E8F92B')));
+    expect(reverb, isNot(contains('0xA0115732, 0x16F06596, 0x4B9846B6, 0x007933D0')));
+  });
+
   test('B12: the Flutter entrypoint reaches the CMake metadata', () {
     expect(_generate(dir, _metadata(entrypoint: 'alphaMain')).exitCode, 0);
     expect(

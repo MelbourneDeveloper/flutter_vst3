@@ -312,6 +312,13 @@ void testControllerRejectsInvalidState() {
     controller->terminate();
 }
 
+/// Hosts find a plugin in saved projects by UID, so Echo's must never change.
+void testEchoKeepsItsUid() {
+    TUID expected;
+    FUID(0xF9D0C991, 0x074C8404, 0x4D825FC5, 0x21E8F92B).toTUID(expected);
+    check(gProcessorUid == VST3::UID::fromTUID(expected), "Echo's processor UID changed");
+}
+
 /// B10: stopping must clear the tail.
 void testDeactivateClearsTail() {
     Instance instance;
@@ -371,6 +378,7 @@ int main(int argc, char** argv) {
         {"B6 truncated state is rejected", testTruncatedStateIsRejected},
         {"B10 deactivate clears the tail", testDeactivateClearsTail},
         {"tail is reported", testTailIsReported},
+        {"Echo keeps its UID", testEchoKeepsItsUid},
         {"processor rejects invalid state", testProcessorRejectsInvalidState},
         {"controller rejects invalid state", testControllerRejectsInvalidState},
     };

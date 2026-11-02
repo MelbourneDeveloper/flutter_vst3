@@ -35,8 +35,8 @@ with tempfile.TemporaryDirectory(prefix='generator-strings-') as tmp:
     generated = {name: (path / 'generated' / name).read_text().replace('\r\n', '\n')
                  for name in ['echo_ids.h', 'metadata.cmake', 'echo_factory.cpp']}
     for line in ['kDelayTimeParam = 0,', 'kFeedbackParam = 1,', 'kMixParam = 2,', 'kBypassParam = 3,', 'kNumParameters = 4',
-                 'kEchoProcessorUID(0x57ABC4DA, 0x33FD9739, 0x12DE22A0, 0xF021DB27);',
-                 'kEchoControllerUID(0x09D1ACE6, 0xD8F32B8B, 0x0AA8F5F4, 0x6EA3EC61);']:
+                 'kEchoProcessorUID(0xF9D0C991, 0x074C8404, 0x4D825FC5, 0x21E8F92B);',
+                 'kEchoControllerUID(0xA0115732, 0x16F06596, 0x4B9846B6, 0x007933D0);']:
         assert line in generated['echo_ids.h'], line
     for line in ['set(JSON_PLUGIN_NAME "Echo")', 'set(JSON_BUNDLE_ID "com.cf.echo")', 'set(PARAM_COUNT "4")',
                  'set(JSON_FLUTTER_ENTRYPOINT "echoMain")']:

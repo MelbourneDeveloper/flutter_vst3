@@ -5,6 +5,8 @@
   "version": "1.0.0",
   "category": "Fx|Delay",
   "bundleIdentifier": "com.cf.echo",
+  "processorUid": "F9D0C991074C84044D825FC521E8F92B",
+  "controllerUid": "A011573216F065964B9846B6007933D0",
   "companyWeb": "https://cf.com",
   "companyEmail": "info@cf.com",
   "parameters": [

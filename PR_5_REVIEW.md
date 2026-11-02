@@ -219,7 +219,7 @@ The first review missed these. Each has a test unless it says otherwise.
 
 | ID | Problem | Fix |
 |---|---|---|
-| H25 | All plugins shared hardcoded UIDs, so a host saw Echo and Reverb as one plugin | UIDs derive from the bundle id. **This changes Echo's UID, so projects saved with the old one won't find it** |
+| H25 | All plugins shared hardcoded UIDs, so a host saw Echo and Reverb as one plugin | New plugins derive UIDs from the bundle id, and Reverb now has its own. Echo keeps its original UIDs, pinned in `plugin_metadata.json`, so saved Echo projects still find it. **Reverb's UID did change, so projects saved with the old Reverb won't find it**. Tests: `H25: a pinned UID is used exactly`, `H25: a bad pinned UID is rejected`, `H25: Echo keeps its original UIDs, and Reverb has its own`, and `Echo keeps its UID` on the built bundle |
 | B15 | Windows release builds never passed the AOT path, so the Flutter editor could never start there | Pass `data\app.so`. Found by the first Windows run of the editor test |
 | F1 | A corrupt `App` on macOS crashed the host | Preflight with `dlopen`, and fall back to native sliders |
 | F2 | On Windows, the worker didn't exit after a DSP exception | Explicit exit with status 70 |
@@ -267,7 +267,7 @@ CI run `41385874459` at `b8857d1`: all 23 jobs green.
 | Suite | Linux | macOS | Windows |
 |---|---|---|---|
 | IPC round trip, 18 cases | Pass | Pass | Pass |
-| Built Echo in a host, 10 cases | Pass | Pass | Pass |
+| Built Echo in a host, 11 cases | Pass | Pass | Pass |
 | Validator on Echo and Reverb, native and Flutter | 47 of 47 | 47 of 47 | 47 of 47 |
 | Editor lifecycle, fallback, H7 wire | Pass | Pass | Pass |
 | Interrupted gesture, on the real controller | Pass | Pass | Pass |

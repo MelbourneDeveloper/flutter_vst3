@@ -49,6 +49,7 @@ void generatePluginFiles(String pluginDir, String pluginName, String targetName,
   _validateTarget(targetName);
   _validateTarget(pluginName);
   _validateMetadata(metadata, parameters);
+  _validateUids(metadata);
 
   // Generate files
   final genDir = buildDir != null 
@@ -184,9 +185,10 @@ ${parameters.map((p) => '    k${_toPascalCase(p['name'] as String)}Param = ${p['
     kNumParameters = ${parameters.length}
 };
 
-// Derived from the bundle identifier, so they are stable and unique per plugin.
-static const FUID k${pluginClass}ProcessorUID(${pluginUid('${metadata['bundleIdentifier']}:processor')});
-static const FUID k${pluginClass}ControllerUID(${pluginUid('${metadata['bundleIdentifier']}:controller')});
+// Pinned in plugin_metadata.json, or derived from the bundle identifier, so they
+// are stable and unique per plugin.
+static const FUID k${pluginClass}ProcessorUID(${_classUid(metadata, 'processor')});
+static const FUID k${pluginClass}ControllerUID(${_classUid(metadata, 'controller')});
 ''';
   
   File('${genDir.path}/${targetName}_ids.h').writeAsStringSync(content);
@@ -229,6 +231,31 @@ String pluginUid(String key) {
     }
     return '0x${hash.toRadixString(16).padLeft(8, '0').toUpperCase()}';
   }).join(', ');
+}
+
+/// A plugin that shipped with a UID pins it in its metadata, because hosts find
+/// a plugin in saved projects by UID. Any other plugin gets one from its bundle id.
+String _classUid(Map<String, dynamic> metadata, String kind) => switch (metadata['${kind}Uid']) {
+      null => pluginUid('${metadata['bundleIdentifier']}:$kind'),
+      final String uid => [
+          for (var word = 0; word < 4; word++)
+            '0x${uid.substring(word * 8, word * 8 + 8).toUpperCase()}',
+        ].join(', '),
+      final other => throw FormatException('Metadata error: ${kind}Uid must be 32 hex digits: $other'),
+    };
+
+void _validateUids(Map<String, dynamic> metadata) {
+  final processor = metadata['processorUid'];
+  final controller = metadata['controllerUid'];
+  (processor == null) == (controller == null)
+      ? null : throw const FormatException('Metadata error: processorUid and controllerUid must be set together');
+  processor != null && processor == controller
+      ? throw const FormatException('Metadata error: processorUid and controllerUid must differ') : null;
+  for (final kind in ['processor', 'controller']) {
+    final uid = metadata['${kind}Uid'];
+    uid == null || (uid is String && RegExp(r'^[0-9A-Fa-f]{32}$').hasMatch(uid))
+        ? null : throw FormatException('Metadata error: ${kind}Uid must be 32 hex digits: $uid');
+  }
 }
 
 String _toPascalCase(String input) => _identifier(input);
