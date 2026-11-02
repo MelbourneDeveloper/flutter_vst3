@@ -119,7 +119,7 @@ public:
             props.assets_path = assetsPath.c_str();
             props.icu_data_path = icuPath.c_str();
             // Release engines load the app from here. Debug bundles have no app.so.
-            const std::wstring aotPath = moduleDir + L"\data\app.so";
+            const std::wstring aotPath = moduleDir + L"\\data\\app.so";
             props.aot_library_path = GetFileAttributesW(aotPath.c_str()) != INVALID_FILE_ATTRIBUTES ? aotPath.c_str() : nullptr;
 #ifndef VST3_FLUTTER_ENTRYPOINT
 #error VST3_FLUTTER_ENTRYPOINT must name the plugin Dart entrypoint
