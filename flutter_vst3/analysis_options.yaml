@@ -1,0 +1,13 @@
+linter:
+  rules:
+    avoid_print: true
+    empty_catches: true
+
+analyzer:
+  errors:
+    avoid_print: error
+    empty_catches: error
+  exclude:
+    - build/**
+    # This command-line generator intentionally writes its output to stdout.
+    - scripts/generate_plugin.dart

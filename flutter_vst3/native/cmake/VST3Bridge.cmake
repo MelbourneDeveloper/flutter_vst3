@@ -350,7 +350,7 @@ function(add_dart_vst3_plugin target_name dart_file)
         if(FLUTTER_VST3_WANTS_FLUTTER)
             message(STATUS "Configuring Flutter Linux UI embedding for ${target_name}...")
             # The engine library is bundled next to the plugin binary.
-            set_target_properties(${target_name} PROPERTIES BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN")
+            set_target_properties(${target_name} PROPERTIES BUILD_WITH_INSTALL_RPATH TRUE BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN")
             target_include_directories(${target_name} PRIVATE
                 "${FLUTTER_LINUX_EPHEMERAL_DIR}"
             )

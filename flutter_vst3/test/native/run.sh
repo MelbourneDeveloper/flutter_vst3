@@ -19,6 +19,13 @@ c++ -std=c++17 -O1 -g -Wall -Wextra -Werror \
   "$root/test/native/ipc_host_recovery_test.cpp" \
   "${libs[@]}" -o "$build/ipc_host_test"
 
+c++ -std=c++17 -O1 -g -Wall -Wextra -Werror \
+  -I"$root/native/include" -I"$root/native/src" \
+  "$root/native/src/vst3_ipc_platform_posix.cpp" \
+  "$root/test/native/ipc_platform_test.cpp" \
+  "${libs[@]}" -o "$build/ipc_platform_test"
+
+"$build/ipc_platform_test"
 "$build/ipc_host_test" "$build/probe_worker"
 
 # Names are unlinked after the handshake, so a clean run or a failed start leaves none.

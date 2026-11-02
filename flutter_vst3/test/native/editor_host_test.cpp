@@ -87,7 +87,7 @@ struct Editor {
         check(view->attached(window, platformViewType()) == kResultTrue, "attached");
     }
     ~Editor() {
-        view->removed(); view->setFrame(nullptr); view = nullptr;
+        if (view) { view->removed(); view->setFrame(nullptr); view = nullptr; }
         if (!terminated) controller->terminate();
         platformDestroyWindow(window);
     }
@@ -96,6 +96,7 @@ struct Editor {
     }
     bool child() { return platformHasVisibleChild(window); }
 };
+#include "editor_host_regressions.h"
 void rendering(Editor& editor) {
     if (!platformCanCapture()) {
         puts("NOT RUN Rendering: this OS cannot read the window back in a test");
@@ -217,6 +218,8 @@ void pointerCycle(Editor& a, RecordingHandler& handler, Drag drag) {
     const bool flutter = a.width() == 600;
 #if defined(_WIN32)
     constexpr int nativeY = 112;
+#elif defined(__APPLE__)
+    constexpr int nativeY = 106;
 #else
     constexpr int nativeY = 145;
 #endif
@@ -285,13 +288,31 @@ void loadBundle(const char* path) {
     }
     check(found, "controller class missing");
 }
+void separateModules(const char* survivorPath) {
+    auto firstModule = module;
+    auto first = std::make_unique<Editor>(); platformPump(500);
+    loadBundle(survivorPath);
+    auto second = std::make_unique<Editor>(); platformPump(500);
+    check(first->width() == 540 && second->width() == 540, "H14 native editors required");
+    first.reset(); firstModule.reset(); platformPump(500);
+    Editor survivor; platformPump(500);
+    RecordingHandler handler; survivor.controller->setComponentHandler(&handler);
+    const auto before = settledImage(survivor.window);
+    pointerCycle(survivor, handler, Drag::completed);
+    changedImage(survivor.window, before, "H14 survivor pixels unchanged");
+    survivor.controller->setComponentHandler(nullptr);
+    puts("PASS H14 separate module unload and survivor slider");
+}
 int main(int argc, char** argv) {
     setvbuf(stdout, nullptr, _IONBF, 0);
     try {
-        check(argc == 3, "usage: editor_host_test bundle good|missing|garbage");
+        check(argc == 3 || argc == 4, "usage: editor_host_test bundle mode [second bundle]");
         platformInit();
         loadBundle(argv[1]);
-        if (std::string(argv[2]) == "wire") sharedMemoryWire();
+        if (std::string(argv[2]) == "modules") { check(argc == 4, "H14 second path required"); separateModules(argv[3]); }
+        else if (std::string(argv[2]) == "environment") environmentInvariant();
+        else if (std::string(argv[2]) == "immediate") immediateClose();
+        else if (std::string(argv[2]) == "wire") sharedMemoryWire();
         else run(argv[2]);
         module.reset(); platformShutdown(); puts("PASS ALL EDITOR CASES"); return 0;
     } catch (const std::exception& e) { fprintf(stderr, "FAIL %s\n", e.what()); return 1; }

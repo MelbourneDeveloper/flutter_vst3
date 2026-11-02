@@ -23,7 +23,9 @@ esac
 cmake -S "$root/vsts/echo" -B "$build/echo" -DCMAKE_BUILD_TYPE=Release -DSMTG_CREATE_PLUGIN_LINK=OFF -DFLUTTER_VST3_NATIVE_UI_ONLY=OFF
 cmake --build "$build/echo" --config Release --target echo
 cmake -S "$root/flutter_vst3/test/native" -B "$build/host" -DCMAKE_BUILD_TYPE=Release
-cmake --build "$build/host" --config Release --target editor_host_test
+cmake --build "$build/host" --config Release --target editor_host_test editor_liveness_test
+liveness="$(find "$build/host" -type f \( -name editor_liveness_test -o -name editor_liveness_test.exe \) -print -quit)"
+"$liveness"
 host_test="$(find "$build/host" -type f \( -name editor_host_test -o -name editor_host_test.exe \) -print -quit)"
 bundle="$(find "$build/echo" -type d -name echo.vst3 -print -quit)"
 test -n "$bundle"
@@ -39,13 +41,27 @@ printf 'not a library\n' > "$build/garbage/echo.vst3/Contents/$app"
 # Every mode runs even after a failure. The marker catches a process that exits
 # with status 0 before finishing.
 result=0
-for mode in good missing garbage wire; do
+modes="${VST3_E2E_MODES:-good missing garbage wire environment immediate modules}"
+for mode in $modes; do
     path="$bundle"
     if [[ "$mode" == missing || "$mode" == garbage ]]; then path="$build/$mode/echo.vst3"; fi
+    extra=()
+    if [[ "$mode" == modules ]]; then
+        mkdir -p "$build/second"
+        rm -rf "$build/second/echo.vst3"
+        cp -a "$build/missing/echo.vst3" "$build/second/"
+        path="$build/missing/echo.vst3"
+        extra=("$build/second/echo.vst3")
+    fi
     echo "=== $mode"
-    "${run[@]+"${run[@]}"}" "$host_test" "$path" "$mode" 2>&1 | tee "$build/$mode.log" || result=1
+    if ! "${run[@]+"${run[@]}"}" "$host_test" "$path" "$mode" "${extra[@]}" 2>&1 | tee "$build/$mode.log"; then
+        result=1
+        if [[ "$mode" == modules ]]; then echo 'FAIL H14 module survivor process failed'; fi
+    fi
     grep -q '^PASS ALL EDITOR CASES' "$build/$mode.log" || result=1
 done
+
+if [[ -n "${VST3_E2E_MODES:-}" ]]; then exit "$result"; fi
 
 cmake -S "$VST3_SDK_DIR" -B "$build/sdk" -DCMAKE_BUILD_TYPE=Release \
   -DSMTG_ADD_VSTGUI=OFF -DSMTG_ENABLE_VSTGUI_SUPPORT=OFF -DSMTG_ADD_VST3_PLUGINS_SAMPLES=OFF -DSMTG_RUN_VST_VALIDATOR=OFF

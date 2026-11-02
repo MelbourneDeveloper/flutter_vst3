@@ -50,10 +50,29 @@ bool platformHasVisibleChild(void* window) {
     return false;
 }
 // Reading a Metal layer back needs a screen recording permission that CI lacks.
-void platformPress(void*, int, int) { throw std::runtime_error("macOS pointer unsupported"); }
-void platformMove(void*, int, int) { throw std::runtime_error("macOS pointer unsupported"); }
-void platformRelease(void*, int, int) { throw std::runtime_error("macOS pointer unsupported"); }
-unsigned long long platformCaptureHash(void*) { throw std::runtime_error("macOS capture unsupported"); }
+void queueMouse(void* window, int x, int y, NSEventType type) {
+    NSView* view = asView(window);
+    NSPoint point = [view convertPoint:NSMakePoint(x, view.bounds.size.height - y) toView:nil];
+    NSEvent* event = [NSEvent mouseEventWithType:type location:point modifierFlags:0
+        timestamp:NSProcessInfo.processInfo.systemUptime windowNumber:view.window.windowNumber
+        context:nil eventNumber:0 clickCount:1 pressure:type == NSEventTypeLeftMouseUp ? 0 : 1];
+    [NSApp postEvent:event atStart:NO];
+}
+void platformPress(void* w, int x, int y) { queueMouse(w, x, y, NSEventTypeLeftMouseDown); }
+void platformMove(void* w, int x, int y) { queueMouse(w, x, y, NSEventTypeLeftMouseDragged); }
+void platformRelease(void* w, int x, int y) {
+    queueMouse(w, x, y, NSEventTypeLeftMouseUp); platformPump(500);
+}
+unsigned long long platformCaptureHash(void* window) {
+    NSView* view = asView(window);
+    NSBitmapImageRep* bitmap = [view bitmapImageRepForCachingDisplayInRect:view.bounds];
+    check(bitmap != nil, "H14 native bitmap allocation");
+    [view cacheDisplayInRect:view.bounds toBitmapImageRep:bitmap];
+    unsigned long long hash = 1469598103934665603ULL;
+    for (NSInteger i = 0; i < bitmap.bytesPerRow * bitmap.pixelsHigh; ++i)
+        hash = (hash ^ bitmap.bitmapData[i]) * 1099511628211ULL;
+    return hash;
+}
 bool platformCanCapture() { return false; }
 bool platformRendered(void*) {
     throw std::runtime_error("Rendering cannot be captured on macOS");

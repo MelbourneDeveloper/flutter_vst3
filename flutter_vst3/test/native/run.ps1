@@ -28,6 +28,11 @@ try {
         "$root\test\native\ipc_host_test.cpp",
         "$root\test\native\ipc_host_recovery_test.cpp",
         '/Fe:ipc_host_test.exe')
+    Invoke-Checked 'cl.exe' @('/nologo', '/std:c++17', '/EHsc', '/W4', '/WX', '/O1', '/D_CRT_SECURE_NO_WARNINGS',
+        "/I$root\native\include", "/I$root\native\src",
+        "$root\native\src\vst3_ipc_platform_win.cpp",
+        "$root\test\native\ipc_platform_test.cpp", 'user32.lib', '/Fe:ipc_platform_test.exe')
+    Invoke-Checked "$build\ipc_platform_test.exe" @()
     Invoke-Checked "$build\ipc_host_test.exe" @("$build\probe_worker.exe")
 } finally {
     Pop-Location

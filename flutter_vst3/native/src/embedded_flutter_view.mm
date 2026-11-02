@@ -6,6 +6,7 @@
 #import <dlfcn.h>
 #import <objc/message.h>
 #include "embedded_flutter_view.h"
+#include "view_logic.h"
 #include "native_cocoa_view.h"
 #include "vst3_shared_memory.h"
 #include "base/source/fobject.h"
@@ -109,9 +110,9 @@ public:
         alive_ = std::make_shared<std::atomic<bool>>(true);
         auto alive = alive_;
         dispatch_async(dispatch_get_main_queue(), ^{
-            if (alive->load() && parentView_ == parent) {
-                mountView(parentNsView);
-            }
+            flutter_vst3::withLiveEditor(*alive, [&] {
+                if (parentView_ == parent) mountView(parentNsView);
+            });
         });
         return kResultTrue;
     }
@@ -155,16 +156,18 @@ public:
         id flChannel = flutterChannel_;
         if (flChannel) {
             dispatch_async(dispatch_get_main_queue(), ^{
-                if (!alive->load()) return;
-                NSDictionary* args = @{@"id": @(paramId), @"value": @(value)};
-                [flChannel performSelector:sel_registerName("invokeMethod:arguments:")
-                                withObject:@"onParameterChanged"
-                                withObject:args];
+                flutter_vst3::withLiveEditor(*alive, [&] {
+                    NSDictionary* args = @{@"id": @(paramId), @"value": @(value)};
+                    [flChannel performSelector:sel_registerName("invokeMethod:arguments:")
+                                    withObject:@"onParameterChanged" withObject:args];
+                });
             });
         } else if (cocoaDelegate_) {
             auto del = cocoaDelegate_;
             dispatch_async(dispatch_get_main_queue(), ^{
-                if (alive->load()) [del updateParamId:paramId withValue:value];
+                flutter_vst3::withLiveEditor(*alive, [&] {
+                    [del updateParamId:paramId withValue:value];
+                });
             });
         }
     }

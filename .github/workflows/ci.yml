@@ -201,6 +201,45 @@ jobs:
             if ($workers.Count -ne 1) { throw "Expected one installed $plugin worker, got $($workers.Count)" }
           }
 
+  editor-mutations:
+    name: Editor mutation proof (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - uses: ./.github/actions/vst3-toolchain
+      - name: Set up MSVC
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+      - name: Kill editor mutants
+        shell: bash
+        run: bash flutter_vst3/test/native/run_editor_mutations.sh
+
+  repository-rules:
+    name: removed design and documentation regressions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - uses: ./.github/actions/vst3-toolchain
+      - run: python3 flutter_vst3/test/native/repo_rules_test.py
+      - run: python3 flutter_vst3/test/native/build_rules_versions_test.py
+      - run: make native dart-deps
+      - run: python3 flutter_vst3/test/native/build_rules_make_test.py
+      - run: python3 flutter_vst3/test/native/build_rules_flutter_test.py
+      - run: python3 flutter_vst3/test/native/docs_commands_test.py
+
   ci:
     name: CI
     if: always()
@@ -215,6 +254,8 @@ jobs:
       - native
       - incremental-build
       - windows-public-build
+      - repository-rules
+      - editor-mutations
     runs-on: ubuntu-latest
     steps:
       - name: Fail if any required job failed or was cancelled

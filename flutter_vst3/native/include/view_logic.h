@@ -1,8 +1,13 @@
 #pragma once
 #include <cstdint>
+#include <atomic>
 #include <set>
 
 namespace flutter_vst3 {
+/// Executes queued UI work only while its editor's liveness token is live.
+template<class Work> inline void withLiveEditor(const std::atomic<bool>& alive, Work work) {
+    if (alive.load()) work();
+}
 inline constexpr unsigned kFlutterStartTimeoutMs = 10000;
 inline bool flutterStartFailed(bool uiAlive, bool engineFailed, bool hasOwner) {
     return hasOwner && (engineFailed || !uiAlive);
