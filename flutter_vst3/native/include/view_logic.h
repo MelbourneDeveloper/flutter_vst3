@@ -33,5 +33,6 @@ struct ShmAddressSource {
     virtual ~ShmAddressSource() = default;
     virtual uintptr_t sharedMemoryAddress() const = 0;
     virtual void endOpenEdits() = 0;
+    virtual bool isEditing(uint32_t id) const = 0;
 };
 }

@@ -141,6 +141,7 @@ void interruptedGesture() {
     controller->beginEdit(0); controller->performEdit(0, 0.37);
     a.view->removed(); handler.exactTriple(0.37);
     controller->endEdit(0); handler.exactTriple(0.37);
+    controller->performEdit(0, 0.5); handler.exactTriple(0.37);
     check(a.view->attached(a.window, platformViewType()) == kResultTrue, "gesture reattach");
     platformPump(1500); handler.events.clear();
     controller->beginEdit(0); controller->performEdit(0, 0.61);
@@ -159,23 +160,45 @@ unsigned long long settledImage(void* window) {
     }
     check(false, "parameter image never settled"); return 0;
 }
+/// Waits for a repaint, since a value reaches the pixels some frames later.
+unsigned long long changedImage(void* window, unsigned long long from, const char* failure) {
+    for (int i = 0; i < 100; ++i) {
+        platformPump(100);
+        if (platformCaptureHash(window) != from) return settledImage(window);
+    }
+    check(false, failure); return 0;
+}
+void awaitImage(void* window, unsigned long long expected, const char* failure) {
+    for (int i = 0; i < 100; ++i) {
+        platformPump(100);
+        if (platformCaptureHash(window) == expected) return;
+    }
+    check(false, failure);
+}
 void displayCycle(Editor& a) {
-    a.controller->setParamNormalized(0, 0.1); auto low = settledImage(a.window);
-    a.controller->setParamNormalized(0, 0.9); auto high = settledImage(a.window);
-    check(low != high, "parameter 0 display unchanged between 0.1 and 0.9");
+    a.controller->setParamNormalized(0, 0.5); platformPump(3000);
+    auto start = settledImage(a.window);
+    a.controller->setParamNormalized(0, 0.1);
+    auto low = changedImage(a.window, start, "parameter 0 display unchanged between 0.5 and 0.1");
+    a.controller->setParamNormalized(0, 0.9);
+    auto high = changedImage(a.window, low, "parameter 0 display unchanged between 0.1 and 0.9");
     MemoryStream state;
     check(a.controller->getState(&state) == kResultTrue, "capture 0.9 state");
     a.controller->setParamNormalized(0, 0.1);
-    check(settledImage(a.window) == low, "parameter 0 display did not return to 0.1");
+    awaitImage(a.window, low, "parameter 0 display did not return to 0.1");
     state.seek(0, IBStream::kIBSeekSet, nullptr);
     check(a.controller->setComponentState(&state) == kResultTrue, "restore 0.9 state");
     check(a.controller->getParamNormalized(0) == 0.9, "state parameter 0 value");
-    check(settledImage(a.window) == high, "restored state display differs from 0.9");
-    a.controller->setParamNormalized(0, 1.0); auto top = settledImage(a.window);
-    a.controller->setParamNormalized(0, 0.1); settledImage(a.window);
+    awaitImage(a.window, high, "restored state display differs from 0.9");
+    a.controller->setParamNormalized(0, 0.1);
+    awaitImage(a.window, low, "parameter 0 display did not return to 0.1 after restore");
+    a.controller->setParamNormalized(0, 1.0);
+    auto top = changedImage(a.window, low, "parameter 0 display unchanged between 0.1 and 1.0");
+    a.controller->setParamNormalized(0, 0.1);
+    awaitImage(a.window, low, "parameter 0 display did not return to 0.1 from 1.0");
     a.controller->setParamNormalized(0, 1.5);
     check(a.controller->getParamNormalized(0) == 1.0, "out-of-range value not clamped");
-    check(settledImage(a.window) == top, "out-of-range value must display as its clamped value");
+    awaitImage(a.window, top, "out-of-range value must display as its clamped value");
 }
 void reattach(Editor& a) {
     check(a.view->attached(a.window, platformViewType()) == kResultTrue, "reattach");

@@ -285,8 +285,7 @@ private:
     static void handleSetParameter(NSDictionary* args, EditController* ctrl, void (^result)(id)) {
         int pid = [args[@"id"] intValue];
         double val = [args[@"value"] doubleValue];
-        ctrl->setParamNormalized(pid, val);
-        ctrl->performEdit(pid, val);
+        applyUiEdit(ctrl, static_cast<ParamID>(pid), val);
         result(@(YES));
     }
 

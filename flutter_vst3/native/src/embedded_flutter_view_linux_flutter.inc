@@ -112,8 +112,7 @@ struct LinuxFlutterHost {
                     double val = (fl_value_get_type(valVal) == FL_VALUE_TYPE_FLOAT)
                         ? fl_value_get_float(valVal)
                         : static_cast<double>(fl_value_get_int(valVal));
-                    ctrl->setParamNormalized(pid, val);
-                    ctrl->performEdit(pid, val);
+                    applyUiEdit(ctrl, static_cast<ParamID>(pid), val);
                 }
             }
             g_autoptr(FlValue) ret = fl_value_new_bool(TRUE);

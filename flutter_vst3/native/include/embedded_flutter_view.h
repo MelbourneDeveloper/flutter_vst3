@@ -41,6 +41,15 @@ namespace Vst {
         if (source) source->endOpenEdits();
     }
 
+    /// Applies an edit from a UI. A UI whose gesture was ended by closing the
+    /// editor can still send edits, and those must not reach the controller.
+    inline void applyUiEdit(EditController* controller, ParamID id, ParamValue value) {
+        auto* source = dynamic_cast<flutter_vst3::ShmAddressSource*>(controller);
+        if (source && !source->isEditing(id)) return;
+        controller->setParamNormalized(id, value);
+        controller->performEdit(id, value);
+    }
+
     /// Interface implemented by native UI views (Cocoa/Win32/X11) to receive
     /// parameter updates directly from the VST3 EditController.
     class IEmbeddedFlutterView {

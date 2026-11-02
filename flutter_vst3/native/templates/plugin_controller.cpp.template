@@ -85,6 +85,13 @@ public:
         return editing_.begin(id) ? EditController::beginEdit(id) : kResultTrue;
     }
 
+    bool isEditing(uint32_t id) const override { return !editing_.shouldEcho(id); }
+
+    /// The host requires every perform to sit between a begin and an end.
+    tresult PLUGIN_API performEdit(ParamID id, ParamValue value) override {
+        return editing_.shouldEcho(id) ? kResultFalse : EditController::performEdit(id, value);
+    }
+
     void endOpenEdits() override {
         for (auto id : editing_.takeOpen()) EditController::endEdit(id);
     }

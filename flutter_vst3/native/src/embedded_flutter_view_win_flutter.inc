@@ -203,6 +203,16 @@ public:
         if (onFailure) onFailure();
     }
 
+    /// A window that's hidden mid-drag never gets the button release, which leaves
+    /// Flutter's gesture open and its next drag with no begin.
+    static void releasePointer() {
+        if (GetCapture() != sSharedFlutterHwnd) return;
+        POINT point{};
+        GetCursorPos(&point);
+        ScreenToClient(sSharedFlutterHwnd, &point);
+        SendMessageW(sSharedFlutterHwnd, WM_LBUTTONUP, 0, MAKELPARAM(point.x, point.y));
+    }
+
     void shutdown() {
         if (watchdog) { KillTimer(nullptr, watchdog); watchdog = 0; }
         if (pendingTimerId != 0) {
@@ -217,6 +227,7 @@ public:
         }
 
         if (sSharedFlutterHwnd) {
+            releasePointer();
             ShowWindow(sSharedFlutterHwnd, SW_HIDE);
             SetParent(sSharedFlutterHwnd, getHolderHwnd());
         }
@@ -288,8 +299,7 @@ private:
                         } else if (std::holds_alternative<int64_t>(valIt->second)) {
                             val = static_cast<double>(std::get<int64_t>(valIt->second));
                         }
-                        ctrl->setParamNormalized(pid, val);
-                        ctrl->performEdit(pid, val);
+                        applyUiEdit(ctrl, static_cast<Steinberg::Vst::ParamID>(pid), val);
                         result->Success(flutter::EncodableValue(true));
                     } else {
                         result->Error("MISSING_PARAM", "id or value missing");
