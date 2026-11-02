@@ -296,6 +296,14 @@ void separateModules(const char* survivorPath) {
     check(first->width() == 540 && second->width() == 540, "H14 native editors required");
     first.reset(); firstModule.reset(); platformPump(500);
     Editor survivor; platformPump(500);
+    check(survivor.width() == 540 && survivor.child(), "H14 survivor editor did not open");
+    check(survivor.controller->setParamNormalized(0, 0.37) == kResultTrue, "H14 survivor update");
+    check(survivor.controller->getParamNormalized(0) == 0.37, "H14 survivor value");
+    if (!platformCanCapture()) {
+        puts("PASS H14 separate module unload and survivor opens");
+        puts("NOT RUN H14 survivor pixels and pointer: macOS has no capture or input on CI");
+        return;
+    }
     RecordingHandler handler; survivor.controller->setComponentHandler(&handler);
     const auto before = settledImage(survivor.window);
     pointerCycle(survivor, handler, Drag::completed);

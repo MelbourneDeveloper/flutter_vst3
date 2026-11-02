@@ -1,4 +1,5 @@
 """Execute every documented individual package test command."""
+import os
 import pathlib
 import re
 import subprocess
@@ -17,7 +18,8 @@ class DocumentationCommands(unittest.TestCase):
         self.assertTrue({'flutter_vst3', 'vsts/echo', 'dart_vst_host', 'dart_vst_graph'} <= packages)
         for command in commands:
             with self.subTest(command=command):
-                result = subprocess.run(['bash', '-lc', command], cwd=ROOT,
+                env = {k: v for k, v in os.environ.items() if k not in ('CI', 'GITHUB_ACTIONS')}
+                result = subprocess.run(['bash', '-lc', command], cwd=ROOT, env=env,
                                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
                 self.assertEqual(0, result.returncode, result.stdout)
                 self.assertIn('All tests passed!', result.stdout)

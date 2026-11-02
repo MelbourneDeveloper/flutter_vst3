@@ -221,16 +221,6 @@ public:
         SetTimer(sSharedFlutterHwnd, kHeldButtonTimer, 20, enableWhenReleased);
     }
 
-    /// Ends Flutter's drag before its window hides, so the drag can't depend on a
-    /// button release that may never reach that window.
-    static void releasePointer() {
-        if (GetCapture() != sSharedFlutterHwnd) return;
-        POINT point{};
-        GetCursorPos(&point);
-        ScreenToClient(sSharedFlutterHwnd, &point);
-        SendMessageW(sSharedFlutterHwnd, WM_LBUTTONUP, 0, MAKELPARAM(point.x, point.y));
-    }
-
     void shutdown() {
         if (watchdog) { KillTimer(nullptr, watchdog); watchdog = 0; }
         if (pendingTimerId != 0) {
@@ -245,7 +235,6 @@ public:
         }
 
         if (sSharedFlutterHwnd) {
-            releasePointer();
             KillTimer(sSharedFlutterHwnd, kHeldButtonTimer);
             EnableWindow(sSharedFlutterHwnd, TRUE);
             ShowWindow(sSharedFlutterHwnd, SW_HIDE);

@@ -6,10 +6,11 @@ root="$(cd "$(dirname "$0")/../../.." && pwd)"
 case "$(uname)" in
   Linux) mutants=(linux_release h13 h15) ;;
   Darwin) mutants=(h15) ;;
-  *) mutants=(win_release win_ignore h12 h14 h15) ;;
+  *) mutants=(win_ignore h12 h14 h15) ;;
 esac
 work="$(mktemp -d /tmp/testb_mutations.XXXXXX)"
 echo "Mutation evidence: $work"
+survivors=0
 for mutant in "${mutants[@]}"; do
   tree="$work/$mutant/source"
   mkdir -p "$tree"
@@ -26,13 +27,6 @@ if mutant == 'linux_release':
     replace(base/'embedded_flutter_view_linux_flutter.inc', '            releasePointer();', '            /* mutant: no release */')
 elif mutant == 'win_ignore':
     replace(base/'embedded_flutter_view_win_flutter.inc', '        ignoreHeldButton();', '        /* mutant: no ignore */')
-elif mutant == 'win_release':
-    path = base/'embedded_flutter_view_win_flutter.inc'
-    text = path.read_text(); start = text.index('    static void releasePointer() {')
-    begin = text.index('{', start); end = begin + 1; depth = 1
-    while depth:
-        depth += (text[end] == '{') - (text[end] == '}'); end += 1
-    replace(path, text[start:end], '    static void releasePointer() {}')
 elif mutant == 'h12':
     replace(base/'embedded_flutter_view_win_flutter.inc', 'sFlDll = LoadLibraryExW(', 'SetDllDirectoryW(L"C:\\\\Windows");\n            sFlDll = LoadLibraryExW(')
 elif mutant == 'h13':
@@ -62,17 +56,20 @@ PY
     command=(env "VST3_E2E_BUILD_DIR=$work/$mutant/build" "VST3_E2E_MODES=$modes" bash "$tree/flutter_vst3/test/native/run_editor_e2e.sh")
   fi
   if "${command[@]}" > "$work/$mutant.log" 2>&1; then
-    echo "FAIL mutant survived: $mutant"; exit 1
+    echo "FAIL mutant survived: $mutant"; survivors=$((survivors + 1)); continue
   fi
   case "$mutant" in
     linux_release) expected='FAIL .*drag missing events' ;;
-    win_release) expected='FAIL .*(drag|contract)' ;;
     win_ignore) expected='FAIL .*(contract:|drag boundaries)' ;;
     h12) expected='FAIL H12 DLL directory changed' ;;
     h13) expected='FAIL H13 GDK_BACKEND changed' ;;
     h14) expected='FAIL H14|FAIL .*drag|FAIL .*controller|FAIL .*attached' ;;
     h15) expected='FAIL H15 dead token ran work' ;;
   esac
-  grep -E "$expected" "$work/$mutant.log"
+  if ! grep -E "$expected" "$work/$mutant.log"; then
+    echo "FAIL mutant failed for another reason: $mutant"; tail -15 "$work/$mutant.log"
+    survivors=$((survivors + 1)); continue
+  fi
   echo "KILLED $mutant"
 done
+test "$survivors" -eq 0
