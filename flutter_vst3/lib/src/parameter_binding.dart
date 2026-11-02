@@ -16,6 +16,7 @@ class VST3ParameterBinding {
   final Map<int, double> _parameters = {};
   final Map<int, String> _parameterNames = {};
   final Map<int, String> _parameterUnits = {};
+  final Set<int> _pendingBegins = {};
   final int parameterCount;
 
   /// Returns the singleton binding instance.
@@ -46,6 +47,7 @@ class VST3ParameterBinding {
         case 'onHostDetached':
           _isHostAttached = false;
           _audioReader = null;
+          _pendingBegins.clear();
           notifyListeners();
         case 'onHostAttached':
           _isHostAttached = true;
@@ -157,10 +159,15 @@ class VST3ParameterBinding {
   }
 
   /// Begins one host automation gesture.
-  Future<void> beginEdit(int id) => _send('beginEdit', {'id': id});
+  ///
+  /// The host hears of it at the first value, so that a tap, or a stray pointer
+  /// event, leaves no empty gesture on the host.
+  Future<void> beginEdit(int id) async => _pendingBegins.add(id);
 
   /// Ends one host automation gesture.
-  Future<void> endEdit(int id) => _send('endEdit', {'id': id});
+  Future<void> endEdit(int id) async => _pendingBegins.remove(id)
+      ? null
+      : await _send('endEdit', {'id': id});
 
   /// Without a host there's no channel to send to, which isn't an error.
   Future<void> _send(String method, Map<String, Object> arguments) async {
@@ -175,6 +182,7 @@ class VST3ParameterBinding {
   Future<void> setParameter(int id, double value) async {
     final clamped = value.clamp(0.0, 1.0);
     _parameters[id] = clamped;
+    _pendingBegins.remove(id) ? await _send('beginEdit', {'id': id}) : null;
     await _send('setParameter', {'id': id, 'value': clamped});
     notifyListeners();
   }

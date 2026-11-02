@@ -131,7 +131,9 @@ void main() {
         throwsA(isA<PlatformException>()));
     await expectLater(
         binding.setParameter(0, 0.5), throwsA(isA<PlatformException>()));
-    await expectLater(binding.beginEdit(0), throwsA(isA<PlatformException>()));
+    await binding.beginEdit(0);
+    await expectLater(
+        binding.setParameter(0, 0.6), throwsA(isA<PlatformException>()));
     await expectLater(binding.endEdit(0), throwsA(isA<PlatformException>()));
   });
 }

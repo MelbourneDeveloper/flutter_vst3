@@ -89,6 +89,36 @@ void main() {
     await _rejectMessages(binding);
     await _rejectInitial(binding);
   });
+  test('a gesture reaches the host only once a value changes', () async {
+    _initial = const <Object?, Object?>{'0': 0.25, '2': 0.5};
+    final binding = await _setup();
+    _calls.clear();
+    await binding.beginEdit(1);
+    await binding.endEdit(1);
+    expect(_calls, isEmpty);
+    await binding.beginEdit(1);
+    expect(_calls, isEmpty);
+    await binding.setParameter(1, 0.4);
+    await binding.setParameter(1, 0.5);
+    await binding.endEdit(1);
+    expect(_calls.map((c) => c.method).toList(),
+        ['beginEdit', 'setParameter', 'setParameter', 'endEdit']);
+    expect(_calls.map((c) => c.arguments).toList(), [
+      {'id': 1}, {'id': 1, 'value': 0.4}, {'id': 1, 'value': 0.5}, {'id': 1}
+    ]);
+  });
+  test('closing the editor forgets a gesture that has not started', () async {
+    _initial = const <Object?, Object?>{'0': 0.25, '2': 0.5};
+    final binding = await _setup();
+    _calls.clear();
+    await binding.beginEdit(1);
+    await _messenger.handlePlatformMessage(_channel.name,
+        _codec.encodeMethodCall(const MethodCall('onHostDetached')), (_) {});
+    await binding.setParameter(1, 0.6);
+    expect(_calls.map((c) => c.method).toList(), ['setParameter']);
+    await _messenger.handlePlatformMessage(_channel.name,
+        _codec.encodeMethodCall(const MethodCall('onHostAttached')), (_) {});
+  });
   test('running without a host keeps the cache and throws nothing', () async {
     _initial = const <Object?, Object?>{'0': 0.25, '2': 0.5};
     final binding = await _setup();
