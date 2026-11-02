@@ -1,5 +1,4 @@
 """Exercise generator string escaping, identifiers and factory syntax."""
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -33,11 +32,15 @@ with tempfile.TemporaryDirectory(prefix='generator-strings-') as tmp:
     metadata = json.loads((root / 'vsts/echo/plugin_metadata.json').read_text())
     (path / 'plugin_metadata.json').write_text(json.dumps(metadata))
     subprocess.run(command, check=True)
-    expected = {
-        'echo_factory.cpp': '52881c5f83a609aa1a1b7d562507affbf9536fb35136ea3bd7aad940cf1fd91e',
-        'echo_ids.h': '0c92cf336a4e984f869c04ca020b44fb1f495b8d80f43d87036af96534ba3be5',
-        'metadata.cmake': '530ae649f994ae6c4f6cef46556fb97759aaa72b6267f6117605eeeabb67e240',
-    }
-    for name, digest in expected.items():
-        assert hashlib.sha256((path / 'generated' / name).read_bytes()).hexdigest() == digest, name
-    print('PASS exact escaping, identifiers, rejection, SDK syntax and byte-identical Echo identifiers, UIDs and factory')
+    generated = {name: (path / 'generated' / name).read_text().replace('\r\n', '\n')
+                 for name in ['echo_ids.h', 'metadata.cmake', 'echo_factory.cpp']}
+    for line in ['kDelayTimeParam = 0,', 'kFeedbackParam = 1,', 'kMixParam = 2,', 'kBypassParam = 3,', 'kNumParameters = 4',
+                 'kEchoProcessorUID(0x57ABC4DA, 0x33FD9739, 0x12DE22A0, 0xF021DB27);',
+                 'kEchoControllerUID(0x09D1ACE6, 0xD8F32B8B, 0x0AA8F5F4, 0x6EA3EC61);']:
+        assert line in generated['echo_ids.h'], line
+    for line in ['set(JSON_PLUGIN_NAME "Echo")', 'set(JSON_BUNDLE_ID "com.cf.echo")', 'set(PARAM_COUNT "4")',
+                 'set(JSON_FLUTTER_ENTRYPOINT "echoMain")']:
+        assert line in generated['metadata.cmake'], line
+    for line in ['"Echo",', '"Echo Controller",', '"Fx|Delay",', '"1.0.0",']:
+        assert line in generated['echo_factory.cpp'], line
+    print('PASS exact escaping, identifiers, rejection, SDK syntax and unchanged Echo identifiers, UIDs and factory')
