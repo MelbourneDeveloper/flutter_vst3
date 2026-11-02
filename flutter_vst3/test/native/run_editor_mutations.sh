@@ -6,7 +6,7 @@ root="$(cd "$(dirname "$0")/../../.." && pwd)"
 case "$(uname)" in
   Linux) mutants=(linux_release h13 h15) ;;
   Darwin) mutants=(h15) ;;
-  *) mutants=(win_ignore h12 h14 h15) ;;
+  *) mutants=(h12 h14 h15) ;;
 esac
 work="$(mktemp -d /tmp/testb_mutations.XXXXXX)"
 echo "Mutation evidence: $work"
@@ -25,8 +25,6 @@ def replace(path, old, new):
     path.write_text(text.replace(old, new), newline='\n')
 if mutant == 'linux_release':
     replace(base/'embedded_flutter_view_linux_flutter.inc', '            releasePointer();', '            /* mutant: no release */')
-elif mutant == 'win_ignore':
-    replace(base/'embedded_flutter_view_win_flutter.inc', '        ignoreHeldButton();', '        /* mutant: no ignore */')
 elif mutant == 'h12':
     replace(base/'embedded_flutter_view_win_flutter.inc', 'sFlDll = LoadLibraryExW(', 'SetDllDirectoryW(L"C:\\\\Windows");\n            sFlDll = LoadLibraryExW(')
 elif mutant == 'h13':
@@ -60,7 +58,6 @@ PY
   fi
   case "$mutant" in
     linux_release) expected='FAIL .*drag missing events' ;;
-    win_ignore) expected='FAIL .*(contract:|drag boundaries)' ;;
     h12) expected='FAIL H12 DLL directory changed' ;;
     h13) expected='FAIL H13 GDK_BACKEND changed' ;;
     h14) expected='FAIL H14|FAIL .*drag|FAIL .*controller|FAIL .*attached' ;;

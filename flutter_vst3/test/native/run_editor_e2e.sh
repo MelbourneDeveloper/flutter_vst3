@@ -54,7 +54,7 @@ for mode in $modes; do
         extra=("$build/second/echo.vst3")
     fi
     echo "=== $mode"
-    if ! "${run[@]+"${run[@]}"}" "$host_test" "$path" "$mode" "${extra[@]}" 2>&1 | tee "$build/$mode.log"; then
+    if ! "${run[@]+"${run[@]}"}" "$host_test" "$path" "$mode" ${extra[@]+"${extra[@]}"} 2>&1 | tee "$build/$mode.log"; then
         result=1
         if [[ "$mode" == modules ]]; then echo 'FAIL H14 module survivor process failed'; fi
     fi
