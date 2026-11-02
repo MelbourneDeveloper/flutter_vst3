@@ -5,6 +5,7 @@
 #endif
 #include <windows.h>
 #include <chrono>
+#include <cstdio>
 using namespace Steinberg;
 using Clock = std::chrono::steady_clock;
 
@@ -32,7 +33,7 @@ IPlugFrame* platformFrame() { return &frame; }
 const char* platformViewType() { return kPlatformTypeHWND; }
 long long platformProcessId() { return GetCurrentProcessId(); }
 void* platformCreateWindow() {
-    HWND window = CreateWindowExW(0, kClassName, L"parent", WS_POPUP | WS_VISIBLE, 0, 0, 600, 650,
+    HWND window = CreateWindowExW(WS_EX_TOPMOST, kClassName, L"parent", WS_POPUP | WS_VISIBLE, 0, 0, 600, 650,
         nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
     check(window != nullptr, "CreateWindowExW");
     return window;
@@ -55,19 +56,25 @@ bool platformHasVisibleChild(void* window) {
     return found;
 }
 bool platformCanCapture() { return true; }
+// Reads the screen, since a swap chain's pixels don't reach the window's own DC.
 bool platformRendered(void* window) {
-    HDC source = GetDC(asWindow(window));
-    check(source != nullptr, "Rendering: GetDC");
-    HDC memory = CreateCompatibleDC(source);
-    HBITMAP bitmap = CreateCompatibleBitmap(source, 600, 650);
+    RECT rect;
+    check(GetWindowRect(asWindow(window), &rect) != 0, "Rendering: GetWindowRect");
+    const int width = rect.right - rect.left, height = rect.bottom - rect.top;
+    HDC screen = GetDC(nullptr);
+    check(screen != nullptr, "Rendering: GetDC");
+    HDC memory = CreateCompatibleDC(screen);
+    HBITMAP bitmap = CreateCompatibleBitmap(screen, width, height);
     SelectObject(memory, bitmap);
-    check(PrintWindow(asWindow(window), memory, PW_RENDERFULLCONTENT) != 0, "Rendering: PrintWindow");
+    check(BitBlt(memory, 0, 0, width, height, screen, rect.left, rect.top, SRCCOPY) != 0, "Rendering: BitBlt");
     const COLORREF first = GetPixel(memory, 0, 0);
     bool varied = false;
-    for (int y = 0; y < 650; y += 2) for (int x = 0; x < 600; x += 2)
+    for (int y = 0; y < height; y += 2) for (int x = 0; x < width; x += 2)
         varied |= GetPixel(memory, x, y) != first;
+    std::printf("captured %dx%d, first pixel %06lx, varied %d\n", width, height,
+        static_cast<unsigned long>(first), varied ? 1 : 0);
     DeleteObject(bitmap);
     DeleteDC(memory);
-    ReleaseDC(asWindow(window), source);
+    ReleaseDC(nullptr, screen);
     return varied;
 }

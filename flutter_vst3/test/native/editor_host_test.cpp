@@ -129,10 +129,11 @@ void reopenSameView() {
 void run(const std::string& mode) {
     if (mode == "good") {
         { Editor a; platformPump(15000); check(a.width() == 600 && a.child(), "B12/B14 Dart did not start");
-          puts("PASS B12/B14 positive"); rendering(a); }
+          puts("PASS B12/B14 positive"); }
         concurrent(true); concurrent(false); reopenSameView();
         { Editor a; platformPump(500); a.controller->terminate(); a.terminated = true; }
         puts("PASS controller terminate before view close");
+        { Editor a; platformPump(3000); rendering(a); }
     } else {
         Editor a;
         if (mode == "missing") check(a.width() == 540, "B14 missing AOT did not fall back immediately");
