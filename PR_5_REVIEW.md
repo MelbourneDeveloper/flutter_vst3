@@ -6,10 +6,10 @@
 | Merged to | `feature/soloud-shared-memory-gui` as `63b646d` (not `main`) |
 | Diff reviewed | `main` (`39d5e42`) to `63b646d`: 26 commits, 119 files |
 | Line numbers | All `file:line` references are at `63b646d` |
-| Verdict | **Do not merge to `main` until every blocker is closed** |
+| Verdict | Every blocker is closed, and CI passes on all three OSes. Not tried in a real DAW: see [limits](#what-this-does-not-prove) |
 
-Status values: `Open`, `Fixed` (the named test proves it), `Fixed, untested on this OS`, `Won't fix` (reason given). The
-[fix log](#fix-log) records how each item was closed.
+Status values: `Fixed` (a test proves it; the [fix log](#fix-log) names it), `Fixed, no dedicated test` (the change is
+in and was checked by reading the code or by a build, but no test fails if it's undone), `Won't fix` (reason given).
 
 ## Summary
 
@@ -28,16 +28,16 @@ and `aot` is `plugin_processor_aot.cpp.template`.
 
 | ID | Where | Trigger | Failure | Required fix | Proof required | Status |
 |---|---|---|---|---|---|---|
-| B1 | `native:269-299` | One block takes over 50 ms, such as a Dart GC pause or a scheduler stall | The late `sem_done` stays posted, so the next block takes it at once and copies the previous output. The host then overwrites input while the worker is reading it. It never recovers | The host owns shared memory only between "done" and "ready". After a timeout it leaves shared memory alone, outputs silence, and resyncs when the late "done" arrives | Round trip with a real worker: stall one block, then assert later blocks return their own output | Open |
-| B2 | `aot:83,106-109` | Host runs at anything but 44.1 kHz, or changes rate or block size | `setupProcessing` stores the rate, but `initialize` returns early when already set up (`native:119`), and block size is hardcoded to `512`. A second activation at a new rate leaves the DSP on the old one, so delay times are wrong | Pass `setup.sampleRate` and `setup.maxSamplesPerBlock`, and reconfigure the live worker on activation | Activate at 44.1k, reactivate at 96k, assert the worker sees 96k | Open |
-| B3 | `native:404-411`, `aot:82-84` | Worker missing, or handshake fails | `native_initialize` swallows the exception, the caller sets `nativeProcessorInitialized = true`, and the plugin is silent with no error. The `catch`/`abort` in `aot` is unreachable. Shared memory, semaphores and the child leak | Roll back all resources on failure and return failure from `setActive` | Missing exe and exe that exits at once: both fail fast, leaving no child, shm or semaphores | Open |
-| B4 | `native:262,293-299` | Block larger than 4096 samples, such as offline render | Only the first 4096 samples are processed. Samples past that in `output` are never written, so the host plays stale memory | Process in chunks of up to 4096 samples | 10000-sample block matches the same audio in small blocks | Open |
-| B5 | `native:401,406` | Two instances of one plugin in a session | `g_processor` is per module. Both instances share one DSP and one parameter set, and audio passes through a single delay line. Disposing either kills both | One host object per plugin instance | Two instances keep separate DSP state, and disposing one leaves the other working | Open |
-| B6 | `aot:181-197` | Save and reload a project | `getState`/`setState` use C++ member doubles that `process()` never updates, and nothing forwards them to Dart. Saved projects restore defaults | Track values in `process()`, and replay state to the worker before audio starts | Automate, get state, load into a new instance, assert the DSP received the values | Open |
-| B7 | `native:261,269-291`, `native:303-315` | Every block | Audio thread holds a mutex, sleeps in a poll loop, and can block for 50 ms against a block budget of a few ms. A full parameter ring drops automation | No mutex or fixed 50 ms wait. Base the budget on block length with a real timed wait, and keep the latest value when the ring is full | Timing test: stalled worker costs at most one budget. Overflow test: the last value arrives | Open |
-| B8 | `native:223-235` | Worker dies mid-session | Every later block stalls 50 ms and outputs silence, and the host's audio thread runs far behind. On Linux, `PR_SET_PDEATHSIG` also fires when the *spawning thread* exits, so the worker can die while the DAW lives. Other platforms orphan the worker if the host dies | Detect a dead child and skip the wait. Have the worker watch the host process directly | Kill the worker: later blocks return silence immediately. Kill the host: the worker exits | Open |
-| B9 | `native:328` | Windows: two instances, editor open on A, delete B | `UnmapViewOfFile` frees memory the UI reader still reads, so the host crashes. POSIX is safe through the `MAP_FIXED` remap | Keep the Windows view mapped with `magic = 0`, and reuse it | Reader stays valid and reads `isValid == false` after dispose on both OSes | Open |
-| B10 | `native:317`, `aot:94-96` | Stop transport, or `setActive(false)` | `reset()` is an empty body, so old tails play on restart | Add a reset command that reaches the DSP | Reset clears an echo tail in a round trip | Open |
+| B1 | `native:269-299` | One block takes over 50 ms, such as a Dart GC pause or a scheduler stall | The late `sem_done` stays posted, so the next block takes it at once and copies the previous output. The host then overwrites input while the worker is reading it. It never recovers | The host owns shared memory only between "done" and "ready". After a timeout it leaves shared memory alone, outputs silence, and resyncs when the late "done" arrives | Round trip with a real worker: stall one block, then assert later blocks return their own output | Fixed |
+| B2 | `aot:83,106-109` | Host runs at anything but 44.1 kHz, or changes rate or block size | `setupProcessing` stores the rate, but `initialize` returns early when already set up (`native:119`), and block size is hardcoded to `512`. A second activation at a new rate leaves the DSP on the old one, so delay times are wrong | Pass `setup.sampleRate` and `setup.maxSamplesPerBlock`, and reconfigure the live worker on activation | Activate at 44.1k, reactivate at 96k, assert the worker sees 96k | Fixed |
+| B3 | `native:404-411`, `aot:82-84` | Worker missing, or handshake fails | `native_initialize` swallows the exception, the caller sets `nativeProcessorInitialized = true`, and the plugin is silent with no error. The `catch`/`abort` in `aot` is unreachable. Shared memory, semaphores and the child leak | Roll back all resources on failure and return failure from `setActive` | Missing exe and exe that exits at once: both fail fast, leaving no child, shm or semaphores | Fixed |
+| B4 | `native:262,293-299` | Block larger than 4096 samples, such as offline render | Only the first 4096 samples are processed. Samples past that in `output` are never written, so the host plays stale memory | Process in chunks of up to 4096 samples | 10000-sample block matches the same audio in small blocks | Fixed |
+| B5 | `native:401,406` | Two instances of one plugin in a session | `g_processor` is per module. Both instances share one DSP and one parameter set, and audio passes through a single delay line. Disposing either kills both | One host object per plugin instance | Two instances keep separate DSP state, and disposing one leaves the other working | Fixed |
+| B6 | `aot:181-197` | Save and reload a project | `getState`/`setState` use C++ member doubles that `process()` never updates, and nothing forwards them to Dart. Saved projects restore defaults | Track values in `process()`, and replay state to the worker before audio starts | Automate, get state, load into a new instance, assert the DSP received the values | Fixed |
+| B7 | `native:261,269-291`, `native:303-315` | Every block | Audio thread holds a mutex, sleeps in a poll loop, and can block for 50 ms against a block budget of a few ms. A full parameter ring drops automation | No mutex or fixed 50 ms wait. Base the budget on block length with a real timed wait, and keep the latest value when the ring is full | Timing test: stalled worker costs at most one budget. Overflow test: the last value arrives | Fixed |
+| B8 | `native:223-235` | Worker dies mid-session | Every later block stalls 50 ms and outputs silence, and the host's audio thread runs far behind. On Linux, `PR_SET_PDEATHSIG` also fires when the *spawning thread* exits, so the worker can die while the DAW lives. Other platforms orphan the worker if the host dies | Detect a dead child and skip the wait. Have the worker watch the host process directly | Kill the worker: later blocks return silence immediately. Kill the host: the worker exits | Fixed |
+| B9 | `native:328` | Windows: two instances, editor open on A, delete B | `UnmapViewOfFile` frees memory the UI reader still reads, so the host crashes. POSIX is safe through the `MAP_FIXED` remap | Keep the Windows view mapped with `magic = 0`, and reuse it | Reader stays valid and reads `isValid == false` after dispose on both OSes | Fixed |
+| B10 | `native:317`, `aot:94-96` | Stop transport, or `setActive(false)` | `reset()` is an empty body, so old tails play on restart | Add a reset command that reaches the DSP | Reset clears an echo tail in a round trip | Fixed |
 
 ### Embedded GUI
 
@@ -45,63 +45,63 @@ Paths are under `flutter_vst3/native/src/`.
 
 | ID | Where | Trigger | Failure | Required fix | Proof required | Status |
 |---|---|---|---|---|---|---|
-| B11 | `embedded_flutter_view.cpp:146,227,262` | Windows: open an editor on a plugin with parameters | `mount` holds a non-recursive `std::mutex`, calls `updateParam`, which locks it again. That's undefined behaviour and in practice a deadlock or abort | Split into locked and unlocked functions | Windows compile plus a test on the extracted logic | Open |
-| B12 | `embedded_flutter_view.cpp:156,168` | Any plugin other than Echo on Windows and Linux | Entrypoint is hardcoded to `"echoMain"`. Reverb's editor can't start | Take the entrypoint from `plugin_metadata.json` and pass it as a compile definition | Generator test: the entrypoint reaches CMake metadata | Open |
-| B13 | `embedded_flutter_view.cpp:247-268,891-913` | Two editors open, close one | `sActiveController` is cleared unconditionally and `updateParam` has no instance check. Editor B drives A's parameters and closing A blanks B | Check ownership on shutdown and update | Test of the extracted ownership logic | Open |
-| B14 | `embedded_flutter_view.cpp:1216,1228,1231` | Flutter engine fails to start | `attached` ignores the failure and returns `kResultTrue`, leaving a blank editor. The PR claims a graceful fallback | Return failure, or mount the native sliders that already exist | Force init failure: native UI appears or `attached` fails | Open |
+| B11 | `embedded_flutter_view.cpp:146,227,262` | Windows: open an editor on a plugin with parameters | `mount` holds a non-recursive `std::mutex`, calls `updateParam`, which locks it again. That's undefined behaviour and in practice a deadlock or abort | Split into locked and unlocked functions | Windows compile plus a test on the extracted logic | Fixed |
+| B12 | `embedded_flutter_view.cpp:156,168` | Any plugin other than Echo on Windows and Linux | Entrypoint is hardcoded to `"echoMain"`. Reverb's editor can't start | Take the entrypoint from `plugin_metadata.json` and pass it as a compile definition | Generator test: the entrypoint reaches CMake metadata | Fixed |
+| B13 | `embedded_flutter_view.cpp:247-268,891-913` | Two editors open, close one | `sActiveController` is cleared unconditionally and `updateParam` has no instance check. Editor B drives A's parameters and closing A blanks B | Check ownership on shutdown and update | Test of the extracted ownership logic | Fixed |
+| B14 | `embedded_flutter_view.cpp:1216,1228,1231` | Flutter engine fails to start | `attached` ignores the failure and returns `kResultTrue`, leaving a blank editor. The PR claims a graceful fallback | Return failure, or mount the native sliders that already exist | Force init failure: native UI appears or `attached` fails | Fixed |
 
 ## High
 
 | ID | Where | Problem | Fix | Status |
 |---|---|---|---|---|
-| H1 | `flutter_vst3/lib/src/vst3_shared_memory_processor.dart:339-349` | `readIdx++` is an unbounded Dart int but `writeIdx` is `Uint32`. At the 2^32 wrap, `readIdx != writeIdx` never ends and the worker hangs | Mask to 32 bits, with a wrap test | Open |
-| H2 | same file `:165-172` | `mmap` is compared with `nullptr`, not `MAP_FAILED`. `sem_open` results aren't checked, so a failure segfaults later | Check both and throw | Open |
-| H3 | same file, plus `vst3_shared_memory.h` | Layout constants are hand-copied in Dart, `version` is never validated, and C++ has no `static_assert` | `static_assert` in C++, a test parsing the header against Dart constants, and a version check | Open |
-| H4 | `native:123,195,217-218` | Names use only 16 bits of `this`. On Windows, a collision opens the existing mapping and `memset`s another instance's audio. Mode `0666` lets any local user read or inject audio | Full pointer in the name, exclusive creation, mode `0600` | Open |
-| H5 | `native:166` | `CreateProcessA` flags are `0`, so a console window pops up with each instance on Windows | `CREATE_NO_WINDOW` | Open |
-| H6 | `native:234` | `exit(1)` after `fork` runs host static destructors in the child | `_exit` | Open |
-| H7 | `flutter_vst3/native/src/vst3_shared_memory.cpp:7-15` | Process-global "active shm": last writer wins, so editor A shows instance B's waveform. Closing either instance nulls it for both | Route the address from processor to controller over `IConnectionPoint` | Open |
-| H8 | `flutter_vst3/lib/src/shared_memory_reader.dart:46-54,124-139` | `try/catch` around a raw pointer deref can't catch a segfault. `numSamples` isn't clamped | Rely on B9 for validity, remove the catch, clamp | Open |
-| H9 | `flutter_vst3/lib/src/flutter_vst3_bridge.dart:44-56` | `registerProcessor` now always throws, but `vsts/echo/lib/src/echo_bridge.dart:14` calls it and `flutter_vst3/README.md:60` documents it. The export of `flutter_vst3_callbacks.dart` was removed without a changelog entry | Remove the stale API, caller and docs, or restore it | Open |
-| H10 | `embedded_flutter_view.cpp:307-310,764-767`, `:510-513,1059-1062`, `embedded_flutter_view.mm:240-243`, `native_cocoa_view.mm:22-25` | Each drag tick sends begin, perform and end, so a single gesture becomes hundreds of automation undo steps | One begin and end per gesture, with channel methods for Dart | Open |
-| H11 | `plugin_controller.cpp.template:44-50` | `setParamNormalized` echoes the UI's own edits back, so sliders jitter during a drag | Skip the echo while the parameter is being edited | Open |
-| H12 | `embedded_flutter_view.cpp:128` | `SetDllDirectoryW` changes host-wide DLL search and is never restored | Restore it, or use `LoadLibraryExW` with full paths | Open |
-| H13 | `embedded_flutter_view.cpp:710-712,949-950` | `setenv("GDK_BACKEND")` and `gdk_set_allowed_backends` change the whole host process | Skip when GTK is already initialized, and document the X11 requirement | Open |
-| H14 | `embedded_flutter_view.cpp:397-423` | A fixed window class name registers under the host `hInstance` with this DLL's `wndProc`. A second plugin gets the first plugin's window procedure, which is a crash once that module unloads | Use a per-module class name and the module's own `HINSTANCE` | Open |
-| H15 | `embedded_flutter_view.mm:85-89,230-233` | `dispatch_async` captures raw `this`, and `weakCtrl` is a raw pointer, so it's use-after-free if the view closes first | Liveness token checked in the block | Open |
-| H16 | `embedded_flutter_view.mm:49-51`, `native_cocoa_view.h:10-14` | Flutter framework class lookups are process-wide. Objective-C classes in embedded view code can collide between plugins | Per-plugin class prefix everywhere | Open |
-| H17 | `flutter_vst3/native/cmake/VST3Bridge.cmake:44-45` | The Steinberg validator is turned off | Turn it on and run it in CI | Open |
-| H18 | `VST3Bridge.cmake:385-387,420-422,450-452` | Release builds silently fall back to the Debug Flutter bundle | `FATAL_ERROR` | Open |
-| H19 | `VST3Bridge.cmake:314-316` | Windows and Linux silently drop the embedded GUI when `ephemeral` is absent at configure time. No `$ORIGIN` RPATH was found for `libflutter_linux_gtk.so` | Fail or say so with `message(STATUS)`, and set the RPATH | Open |
-| H20 | `vsts/flutter_reverb/lib/src/reverb_processor.dart:139-142` | `processStereo` returns silently when uninitialized or on a length mismatch, leaving output unwritten. Breaks the repo's fail-hard rule | Throw, as Echo does | Open |
-| H21 | `vsts/echo/lib/src/echo_processor.dart:93-96` | Bypass doesn't feed the delay line or advance the write index, so unbypassing replays a frozen tail | Keep the delay line running during bypass | Open |
-| H22 | `vsts/echo/lib/src/echo_processor.dart:7,98` | Delay is 10-500 ms but docs and metadata say 0-1000 ms. The fixed 132300-sample buffer also clamps delay at high rates | Match the docs and size the buffer from the sample rate | Open |
-| H23 | `vsts/echo/lib/src/echo_processor.dart:125-128` | `_softSaturate` jumps from 1.0 to 0.5 at the threshold, which adds a click in the feedback path | Continuous curve, with a test | Open |
-| H24 | `vsts/echo/lib/ui/echo_ui.dart:56` | Shows `value*100` with the units, so "50.0ms" appears for a real delay of about 255 ms | Format from each parameter's real range | Open |
+| H1 | `flutter_vst3/lib/src/vst3_shared_memory_processor.dart:339-349` | `readIdx++` is an unbounded Dart int but `writeIdx` is `Uint32`. At the 2^32 wrap, `readIdx != writeIdx` never ends and the worker hangs | Mask to 32 bits, with a wrap test | Fixed |
+| H2 | same file `:165-172` | `mmap` is compared with `nullptr`, not `MAP_FAILED`. `sem_open` results aren't checked, so a failure segfaults later | Check both and throw | Fixed |
+| H3 | same file, plus `vst3_shared_memory.h` | Layout constants are hand-copied in Dart, `version` is never validated, and C++ has no `static_assert` | `static_assert` in C++, a test parsing the header against Dart constants, and a version check | Fixed |
+| H4 | `native:123,195,217-218` | Names use only 16 bits of `this`. On Windows, a collision opens the existing mapping and `memset`s another instance's audio. Mode `0666` lets any local user read or inject audio | Full pointer in the name, exclusive creation, mode `0600` | Fixed, no dedicated test |
+| H5 | `native:166` | `CreateProcessA` flags are `0`, so a console window pops up with each instance on Windows | `CREATE_NO_WINDOW` | Fixed, no dedicated test |
+| H6 | `native:234` | `exit(1)` after `fork` runs host static destructors in the child | `_exit` | Fixed, no dedicated test |
+| H7 | `flutter_vst3/native/src/vst3_shared_memory.cpp:7-15` | Process-global "active shm": last writer wins, so editor A shows instance B's waveform. Closing either instance nulls it for both | Route the address from processor to controller over `IConnectionPoint` | Fixed |
+| H8 | `flutter_vst3/lib/src/shared_memory_reader.dart:46-54,124-139` | `try/catch` around a raw pointer deref can't catch a segfault. `numSamples` isn't clamped | Rely on B9 for validity, remove the catch, clamp | Fixed |
+| H9 | `flutter_vst3/lib/src/flutter_vst3_bridge.dart:44-56` | `registerProcessor` now always throws, but `vsts/echo/lib/src/echo_bridge.dart:14` calls it and `flutter_vst3/README.md:60` documents it. The export of `flutter_vst3_callbacks.dart` was removed without a changelog entry | Remove the stale API, caller and docs, or restore it | Fixed, no dedicated test |
+| H10 | `embedded_flutter_view.cpp:307-310,764-767`, `:510-513,1059-1062`, `embedded_flutter_view.mm:240-243`, `native_cocoa_view.mm:22-25` | Each drag tick sends begin, perform and end, so a single gesture becomes hundreds of automation undo steps | One begin and end per gesture, with channel methods for Dart | Fixed |
+| H11 | `plugin_controller.cpp.template:44-50` | `setParamNormalized` echoes the UI's own edits back, so sliders jitter during a drag | Skip the echo while the parameter is being edited | Fixed |
+| H12 | `embedded_flutter_view.cpp:128` | `SetDllDirectoryW` changes host-wide DLL search and is never restored | Restore it, or use `LoadLibraryExW` with full paths | Fixed, no dedicated test |
+| H13 | `embedded_flutter_view.cpp:710-712,949-950` | `setenv("GDK_BACKEND")` and `gdk_set_allowed_backends` change the whole host process | Skip when GTK is already initialized, and document the X11 requirement | Fixed, no dedicated test |
+| H14 | `embedded_flutter_view.cpp:397-423` | A fixed window class name registers under the host `hInstance` with this DLL's `wndProc`. A second plugin gets the first plugin's window procedure, which is a crash once that module unloads | Use a per-module class name and the module's own `HINSTANCE` | Fixed, no dedicated test |
+| H15 | `embedded_flutter_view.mm:85-89,230-233` | `dispatch_async` captures raw `this`, and `weakCtrl` is a raw pointer, so it's use-after-free if the view closes first | Liveness token checked in the block | Fixed, no dedicated test |
+| H16 | `embedded_flutter_view.mm:49-51`, `native_cocoa_view.h:10-14` | Flutter framework class lookups are process-wide. Objective-C classes in embedded view code can collide between plugins | Per-plugin class prefix everywhere | Won't fix in part (see fix log) |
+| H17 | `flutter_vst3/native/cmake/VST3Bridge.cmake:44-45` | The Steinberg validator is turned off | Turn it on and run it in CI | Fixed |
+| H18 | `VST3Bridge.cmake:385-387,420-422,450-452` | Release builds silently fall back to the Debug Flutter bundle | `FATAL_ERROR` | Fixed, no dedicated test |
+| H19 | `VST3Bridge.cmake:314-316` | Windows and Linux silently drop the embedded GUI when `ephemeral` is absent at configure time. No `$ORIGIN` RPATH was found for `libflutter_linux_gtk.so` | Fail or say so with `message(STATUS)`, and set the RPATH | Fixed, no dedicated test |
+| H20 | `vsts/flutter_reverb/lib/src/reverb_processor.dart:139-142` | `processStereo` returns silently when uninitialized or on a length mismatch, leaving output unwritten. Breaks the repo's fail-hard rule | Throw, as Echo does | Fixed |
+| H21 | `vsts/echo/lib/src/echo_processor.dart:93-96` | Bypass doesn't feed the delay line or advance the write index, so unbypassing replays a frozen tail | Keep the delay line running during bypass | Fixed |
+| H22 | `vsts/echo/lib/src/echo_processor.dart:7,98` | Delay is 10-500 ms but docs and metadata say 0-1000 ms. The fixed 132300-sample buffer also clamps delay at high rates | Match the docs and size the buffer from the sample rate | Fixed |
+| H23 | `vsts/echo/lib/src/echo_processor.dart:125-128` | `_softSaturate` jumps from 1.0 to 0.5 at the threshold, which adds a click in the feedback path | Continuous curve, with a test | Fixed |
+| H24 | `vsts/echo/lib/ui/echo_ui.dart:56` | Shows `value*100` with the units, so "50.0ms" appears for a real delay of about 255 ms | Format from each parameter's real range | Fixed |
 
 ## Medium and low
 
 | ID | Where | Problem | Status |
 |---|---|---|---|
-| M1 | `flutter_vst3/lib/src/parameter_binding.dart:48-55,81,178` | `print` debugging and `catch (_) {}` hide failures | Open |
-| M2 | `parameter_binding.dart:189-224` | Dead `VST3AudioProcessor` class describing the rejected same-isolate design | Open |
-| M3 | `vsts/echo/lib/src/echo_processor.dart:114-122` | `waveformBuffer` is unreachable because the UI runs in another process, and it costs CPU each block | Open |
-| M4 | `vsts/echo/lib/ui/echo_ui.dart:2` | Comment claims the UI shares a process with the DSP | Open |
-| M5 | `vsts/echo/lib/ui/echo_ui.dart:198,206,219` | Forces a channel call on every parameter change, and every 33 ms when there is no reader | Open |
-| M6 | `vsts/echo/lib/ui/echo_ui.dart:307` | Divides by zero with a single sample | Open |
-| M7 | `vsts/echo/lib/ui/echo_ui.dart:91,95`, `pubspec.yaml` | Uses `withValues` and `activeThumbColor` while pubspecs allow Flutter `>=3.0.0` | Open |
-| M8 | `flutter_vst3/native/src/flutter_embedder.cpp`, `flutter_embedder_stubs.cpp`, `include/flutter_embedder.h` | Unbuilt code. The first defines `class FlutterEmbedder` twice and can't compile, and the stubs return fake handles such as `0x1234` | Open |
-| M9 | `flutter_vst3/native/src/plugin_view.cpp:86` | Unbuilt, and runs `system()` with a hardcoded `/Users/christianfindlay/...` path | Open |
-| M10 | `vsts/echo/echo_processor` | 5.6 MB committed Mach-O binary | Open |
-| M11 | `vsts/echo/macos/Flutter/ephemeral/*`, `.vscode/settings.json` | Machine-specific paths committed | Open |
-| M12 | `vsts/echo/README.md` | Flutter template boilerplate | Open |
-| M13 | `FLUTTER_UI_SPEC.md` | Calls same-isolate UI "non-negotiable", which the implementation contradicts | Open |
-| M14 | `dart_vst_graph/lib/src/bindings.dart` | `try/catch` fallback library loading breaks the repo's no-fallback rule | Open |
-| M15 | `embedded_flutter_view.cpp:708` and others | `fprintf` debugging left in | Open |
-| M16 | `embedded_flutter_view.cpp:1268` | `setFrame` is ignored, and no `IRunLoop` is used on Linux, so GLib timers depend on the host pumping GLib (`:723`) | Open |
-| M17 | `flutter_vst3/pubspec.yaml` | Flutter SDK dependency breaks the Makefile's `dart pub get` | Open |
-| M18 | `aot:131-135` | Only the last automation point of each block is used. Not sample-accurate, which should be documented | Open |
-| M19 | `native:1-22`, `vst3_shared_memory.h:1-25` | Comments claim "zero-copy" and "lock-free", which the code isn't | Open |
+| M1 | `flutter_vst3/lib/src/parameter_binding.dart:48-55,81,178` | `print` debugging and `catch (_) {}` hide failures | Fixed, no dedicated test |
+| M2 | `parameter_binding.dart:189-224` | Dead `VST3AudioProcessor` class describing the rejected same-isolate design | Fixed, no dedicated test |
+| M3 | `vsts/echo/lib/src/echo_processor.dart:114-122` | `waveformBuffer` is unreachable because the UI runs in another process, and it costs CPU each block | Fixed, no dedicated test |
+| M4 | `vsts/echo/lib/ui/echo_ui.dart:2` | Comment claims the UI shares a process with the DSP | Fixed, no dedicated test |
+| M5 | `vsts/echo/lib/ui/echo_ui.dart:198,206,219` | Forces a channel call on every parameter change, and every 33 ms when there is no reader | Fixed |
+| M6 | `vsts/echo/lib/ui/echo_ui.dart:307` | Divides by zero with a single sample | Fixed |
+| M7 | `vsts/echo/lib/ui/echo_ui.dart:91,95`, `pubspec.yaml` | Uses `withValues` and `activeThumbColor` while pubspecs allow Flutter `>=3.0.0` | Fixed, no dedicated test |
+| M8 | `flutter_vst3/native/src/flutter_embedder.cpp`, `flutter_embedder_stubs.cpp`, `include/flutter_embedder.h` | Unbuilt code. The first defines `class FlutterEmbedder` twice and can't compile, and the stubs return fake handles such as `0x1234` | Fixed, no dedicated test |
+| M9 | `flutter_vst3/native/src/plugin_view.cpp:86` | Unbuilt, and runs `system()` with a hardcoded `/Users/christianfindlay/...` path | Fixed, no dedicated test |
+| M10 | `vsts/echo/echo_processor` | 5.6 MB committed Mach-O binary | Fixed, no dedicated test |
+| M11 | `vsts/echo/macos/Flutter/ephemeral/*`, `.vscode/settings.json` | Machine-specific paths committed | Fixed, no dedicated test |
+| M12 | `vsts/echo/README.md` | Flutter template boilerplate | Fixed, no dedicated test |
+| M13 | `FLUTTER_UI_SPEC.md` | Calls same-isolate UI "non-negotiable", which the implementation contradicts | Fixed, no dedicated test |
+| M14 | `dart_vst_graph/lib/src/bindings.dart` | `try/catch` fallback library loading breaks the repo's no-fallback rule | Fixed, no dedicated test |
+| M15 | `embedded_flutter_view.cpp:708` and others | `fprintf` debugging left in | Fixed, no dedicated test |
+| M16 | `embedded_flutter_view.cpp:1268` | `setFrame` is ignored, and no `IRunLoop` is used on Linux, so GLib timers depend on the host pumping GLib (`:723`) | Fixed |
+| M17 | `flutter_vst3/pubspec.yaml` | Flutter SDK dependency breaks the Makefile's `dart pub get` | Fixed, no dedicated test |
+| M18 | `aot:131-135` | Only the last automation point of each block is used. Not sample-accurate, which should be documented | Fixed, no dedicated test |
+| M19 | `native:1-22`, `vst3_shared_memory.h:1-25` | Comments claim "zero-copy" and "lock-free", which the code isn't | Fixed, no dedicated test |
 
 ## PR claims against the code
 
@@ -147,17 +147,17 @@ Ranked by the damage a regression would do.
 
 | ID | Where | Problem | Status |
 |---|---|---|---|
-| T1 | `Makefile:57,59,61` | `dart test \|\| true` for `flutter_vst3`, reverb and echo, so they can never fail | Open |
-| T2 | `Makefile:92-93,104-105` | `cp` runs from the wrong directory after `cd`, hidden by `\|\| true`, so libraries aren't copied | Open |
-| T3 | `build.ps1:150` | `Run-Tests` covers only host and graph, and doesn't check `$LASTEXITCODE` | Open |
-| T4 | `vsts/echo/test/widget_test.dart` | Imports Flutter, so it fails under `dart test`, hidden by T1 | Open |
-| T5 | `dart_vst_host/test/host_test.dart:151,174,257,291` | Hardcoded `/workspace/...` paths | Open |
-| T6 | `dart_vst_host/test/host_test.dart:286-346` | The "load plugin" test catches everything and prints, so it can't fail | Open |
-| T7 | `dart_vst_host/test/host_test.dart:90` | The "audio generation" test never touches the host | Open |
-| T8 | `vsts/flutter_reverb/test/reverb_test.dart` | A plain `main` with asserts and no `test()`. `flutter test` reports "No tests ran" and exits non-zero | Open |
-| T9 | `vsts/echo/test/echo_test.dart` | Assertions are too weak: `any != 0`, "obvious echo" checks only the first dry sample, and the click threshold is 0.95 | Open |
-| T10 | `flutter_vst3/test/vst3_shared_memory_test.dart:61` | `0x0200` is `O_CREAT` only on macOS. On Linux it's `O_TRUNC`, so the test can write to fd `-1` and segfault. POSIX lookups also fail on Windows | Open |
-| T11 | Repo | No CI on this branch | Open |
+| T1 | `Makefile:57,59,61` | `dart test \|\| true` for `flutter_vst3`, reverb and echo, so they can never fail | Fixed |
+| T2 | `Makefile:92-93,104-105` | `cp` runs from the wrong directory after `cd`, hidden by `\|\| true`, so libraries aren't copied | Fixed, no dedicated test |
+| T3 | `build.ps1:150` | `Run-Tests` covers only host and graph, and doesn't check `$LASTEXITCODE` | Fixed |
+| T4 | `vsts/echo/test/widget_test.dart` | Imports Flutter, so it fails under `dart test`, hidden by T1 | Fixed |
+| T5 | `dart_vst_host/test/host_test.dart:151,174,257,291` | Hardcoded `/workspace/...` paths | Fixed, no dedicated test |
+| T6 | `dart_vst_host/test/host_test.dart:286-346` | The "load plugin" test catches everything and prints, so it can't fail | Fixed, no dedicated test |
+| T7 | `dart_vst_host/test/host_test.dart:90` | The "audio generation" test never touches the host | Fixed, no dedicated test |
+| T8 | `vsts/flutter_reverb/test/reverb_test.dart` | A plain `main` with asserts and no `test()`. `flutter test` reports "No tests ran" and exits non-zero | Fixed |
+| T9 | `vsts/echo/test/echo_test.dart` | Assertions are too weak: `any != 0`, "obvious echo" checks only the first dry sample, and the click threshold is 0.95 | Fixed |
+| T10 | `flutter_vst3/test/vst3_shared_memory_test.dart:61` | `0x0200` is `O_CREAT` only on macOS. On Linux it's `O_TRUNC`, so the test can write to fd `-1` and segfault. POSIX lookups also fail on Windows | Fixed |
+| T11 | Repo | No CI on this branch | Fixed |
 
 ## Credit
 
@@ -181,4 +181,122 @@ UI-thread only). Items that were only reasoned about, and not reproduced, are ma
 
 ## Fix log
 
-Filled in as each item closes.
+### Tests that prove each finding
+
+| Findings | Test | Where |
+|---|---|---|
+| B1, B7, B8, DSP exception | `B1 recovers after a late block`, `B7 stall is bounded`, `B7 parameters survive a stall`, `B8 dead worker is bounded`, `B8 worker exits when the host dies`, `DSP exception is detected` | `flutter_vst3/test/native/ipc_host_recovery_test.cpp`, `ipc_host_test.cpp` |
+| B2, B3, B4, B5, B9, B10 | The cases of the same names, against a real compiled Dart worker, and again against the built Echo | `ipc_host_test.cpp`, `plugin_host_test.cpp` |
+| B6 | `B6 saved state reaches the DSP`, `B6 truncated state is rejected` | `plugin_host_test.cpp` |
+| B11, B12, B14 | `B12/B14 positive`, `B14 broken bundle fallback`. Opening a Windows editor with parameters is what deadlocked in B11. B12 also has `B12: the Flutter entrypoint reaches the CMake metadata` | `editor_host_test.cpp`, `generate_plugin_test.dart` |
+| B13 | `B13 owner closed first`, `B13 secondary closed first`, `B13 same view chooses Flutter again` | `editor_host_test.cpp` |
+| H1, H2, H3 | `parameter ring crosses uint32 wrap and writes read index`, `POSIX failure sentinels are checked without dereferencing`, `every native protocol define matches Dart` | `vst3_worker_loop_test.dart`, `vst3_shm_layout_test.dart` |
+| H7 | `H7 activation sender and forwarding`, `H7 foreign pid accepted without crash`, `H7 deactivation payload` | `editor_host_test.cpp` wire mode |
+| H8 | `reader invalidation and bounded sample counts` | `shared_memory_reader_test.dart` |
+| H10, H11 | `one begin/set/end gesture per knob drag and bypass`, `pointer completed and interrupted gestures`, and the edit suppression checks in `view_logic_test.cpp` | `ui_regression_test.dart`, `editor_host_test.cpp` |
+| H17 | The validator on Echo and Reverb: 47 of 47 on all three OSes | `run_plugin_e2e.sh`, `run_editor_e2e.sh` |
+| H20 | Reverb's fail-hard cases | `reverb_test.dart` |
+| H21, H22, H23, H24 | `bypass records incoming audio and advances tail`, `impulse timing`, `H23: saturation has continuous value and slope at the threshold`, `physical parameter formatting` | `dsp_regression_test.dart`, `ui_regression_test.dart` |
+| M5, M6 | `waveform fetch is attachment-driven, not timer or parameters`, `single sample waveform is finite` | `ui_regression_test.dart` |
+| M16 | The Linux test host provides `IRunLoop` and pumps only that, as a host does, and the editor still starts and draws | `editor_host_platform_x11.cpp` |
+| T1, T3, T4, T8, T9, T10, T11 | `dart_vst_host/test/native/harness_test.sh` injects a failure into each of 5 packages and checks `make test` exits with it. The rewritten package tests, and `.github/workflows/ci.yml` | |
+
+### Found while fixing
+
+The first review missed these. Each has a test unless it says otherwise.
+
+| ID | Problem | Fix |
+|---|---|---|
+| H25 | All plugins shared hardcoded UIDs, so a host saw Echo and Reverb as one plugin | UIDs derive from the bundle id. **This changes Echo's UID, so projects saved with the old one won't find it** |
+| B15 | Windows release builds never passed the AOT path, so the Flutter editor could never start there | Pass `data\app.so`. Found by the first Windows run of the editor test |
+| F1 | A corrupt `App` on macOS crashed the host | Preflight with `dlopen`, and fall back to native sliders |
+| F2 | On Windows, the worker didn't exit after a DSP exception | Explicit exit with status 70 |
+| F3 | On Windows, the Ninja generator built a broken bundle | `FATAL_ERROR` without a Visual Studio generator. No test, as it's a build-time check |
+| F4 | `dart_vst_host` let its `PlugProvider` go out of scope, which terminated the plugin it had loaded | The state owns the provider |
+| F5 | Flutter's Linux platform handler calls `exit(0)` on a plug delete event, which would exit the DAW. A close race also gave `BadWindow` | The plug swallows the delete event. The editor test exited early before this, which its completion marker catches |
+| F6 | The worker inherited the host's file descriptors | `worker does not inherit descriptors` |
+
+### Second adversarial review
+
+Four `pi` reviewers attacked the fixed code, read-only, each required to reproduce or point to exact lines. Reports were checked by hand before anything was changed.
+
+| ID | Problem | Before | Test now | Status |
+|---|---|---|---|---|
+| AI1 | Windows leaked a process handle per dead worker | 20 crashes: 71 to 91 handles | `crash cycles leak nothing` | Fixed |
+| AI2 | A partly late block kept audio while flagged silent | `sample 0 is not silent` | `partly late block is wholly silent` | Fixed |
+| AI3 | The B1 test passed with recovery removed | Mutant survived | `B1 recovers after a late block` now requires recovery | Fixed |
+| AI4 | Echo and Reverb reported no tail, so hosts could cut them off | Tail 0 | `tail is reported`. Reports infinite, because feedback has no fixed length | Fixed |
+| AI5 | NaN and out-of-range saved state reached the processor; the controller read a short state as zeros. Found while checking AI | `invalid value must be rejected` | `processor rejects invalid state`, `controller rejects invalid state` | Fixed |
+| AG1 | Closing an editor mid-drag left the host's gesture open | Open gesture on the host | `interrupted gesture and fresh begin after reattach`, pointer test | Fixed |
+| AG2 | Channel values skipped range and type checks | `getParameter(0)` returned 2.0 | `exact bidirectional contract and atomic rejection` | Fixed |
+| AG3 | The editor test passed with parameter sync removed | Mutants survived | `host to UI display sync and reopen`, `pointer completed and interrupted gestures` | Fixed |
+| AG4 | `attached` accepted unsupported platform types | Returned success | Asserted on every editor opened | Fixed |
+| AG5 | The host could get a perform outside any gesture, after an interrupted drag on Windows. Found by AG3's test on CI | `FAIL drag boundaries`, with performs after the end | Pointer test, and a stray perform in `interrupted gesture`. The controller now drops these | Fixed |
+| AG6 | A host value over 1 displayed wrongly in native sliders and was rejected by the Flutter UI. Found by me | `out-of-range value must display as its clamped value` | Part of the display test | Fixed |
+| AG7 | Dragging, closing the editor, releasing, then reopening left the knob dead, because the embedder still thought the button was down. Found by my reordered pointer test on Linux, and fixed on Windows too | `FAIL drag missing events` | The `releasedWhileClosed` drag in the pointer test | Fixed |
+| AG8 | On Windows, holding the button through a close and reopen left the host's gesture open. Found by the contract check on CI | `contract: gesture left open`, then a drag with no end | The `releasedAfterReopen` drag. The begin now waits for the first value, and the window ignores a button held since before it appeared | Fixed |
+| AD1 | Reverb tests passed with its wet output or decay removed | 6 mutants survived | `wet_contract_test.dart`, with landmarks worked out by hand | Fixed |
+| AD2 | Echo tests passed with feedback removed | 2 mutants survived | `feedback_contract_test.dart` | Fixed |
+| AD3 | Binding tests passed with the wrong id or value sent | 4 mutants survived | `parameter_binding_contract_test.dart` | Fixed |
+| AD4 | Quoted or hyphenated names generated C++ that doesn't compile | `SUCCESS`, then g++ errors | `generator_strings_test.py` compiles the output | Fixed |
+| AD5 | Docs called maximum feedback "infinite", but it's capped at 0.85 | | Docs corrected, ratio asserted | Fixed |
+| AB1 | `build.bat` always ran a Flutter build, which Reverb can't do | Default Windows build failed | CI job `Windows public build and install` | Fixed |
+| AB2 | Incremental builds shipped a stale worker, and accepted invalid Dart | Same hash after an edit | `run_incremental_build.sh` | Fixed |
+| AB3 | `build.bat test` ran the POSIX IPC script on Windows | | CI runs `build.bat test-native` | Fixed |
+| AB4 | The README's test commands used the wrong runner | `dart:ui is not available` | Run by hand on Linux. No test in CI | Fixed, no dedicated test |
+
+The mutation sweep went from 12 of 14 surviving to 0 of 32. These are hand-picked mutants, so this isn't a project-wide rate.
+
+### What ran where
+
+CI run `41377049194` at `3cdd7af`, all 18 jobs green.
+
+| Suite | Linux | macOS | Windows |
+|---|---|---|---|
+| IPC round trip, 18 cases | Pass | Pass | Pass |
+| Built Echo in a host, 10 cases | Pass | Pass | Pass |
+| Validator on Echo and Reverb, native and Flutter | 47 of 47 | 47 of 47 | 47 of 47 |
+| Editor lifecycle, fallback, H7 wire | Pass | Pass | Pass |
+| Interrupted gesture, on the real controller | Pass | Pass | Pass |
+| Rendering, host-to-UI display, pointer drag | Pass | **Not run** | Pass |
+| Public `build.bat` commands | n/a | n/a | Pass |
+| Incremental build, generator output, `flutter_vst3`, Echo and Reverb packages | Pass | Not run | Not run |
+| Host and graph libraries | Pass | Pass | Not run |
+
+### Evidence that the tests can fail
+
+- `plugin_host_test` on the original PR (`63b646d`): 7 of 7 failed, including B2 with the echo at sample 2832 not 4800, and B4 with sample 4096 not rendered. Leftover `/dev/shm/vst3_shm_*` files proved the B3 leak.
+- A leak planted in the IPC run makes `run.sh` exit 1. `red_B13.log` and `red_B14.log` show those cases exit 1 with the fix disabled.
+- Scratch mutations on Linux: an early return in either UI's `updateParam` fails with `parameter 0 display unchanged`, dropping `performEdit` fails with `drag missing events`, and removing the drain on close fails with `drag boundaries`. These ran before the last gesture fixes, and the sweep of 32 ran before the deferred begin. The tests only got stricter after that, but neither was rerun.
+- Not every test was seen failing before its fix. AD1, AD2, AD3 and AG3 found gaps over code that already worked, so they were proven by mutation. AG1's host-level tests were written after its fix: the unit test failed first, and a mutation proves the rest.
+
+### What this does not prove
+
+- **No real DAW has run this.** Everything is the SDK's hosting classes, the validator, and a test host. Try Reaper by hand before release.
+- **macOS isn't checked through its real UI.** CI has no screen capture or input permission, so rendering, display sync and pointer drags print `NOT RUN`. Its Flutter editor starts, and the gesture logic passes, but nobody has seen it draw in these tests. macOS also has no asynchronous startup watchdog, only the synchronous checks.
+- **The Windows pointer fixes were proven only by CI going from failing to passing.** No mutation of `releasePointer` or `ignoreHeldButton` was run on Windows.
+- **Pixel checks cover a limited region.** It catches a value changing and returning, not that a label reads correctly. 0.9 and 1.0 look the same to it on the Flutter knob.
+- **`Fixed, no dedicated test` means what it says.** H4, H5, H6, H12, H13, H14 and H15 were checked by reading the code, or only by the Flutter editor starting on that OS. H12 and H14 in particular need two different plugins in one host, which no test does. Undoing these wouldn't fail CI.
+- **H7's address inside the controller can't be observed from a host.** The test checks the message and its forwarding.
+- **H10 on native sliders** is tested through real pointer drags on Linux and Windows, but not on Cocoa.
+- **Module unload with a live engine** is only exercised by the test process exiting.
+- **Audio-thread timing** was measured on CI and WSL, not under real load. An offline render waits up to 30 seconds for a worker that hangs.
+
+### Decisions
+
+- H16: `Won't fix` for the Flutter framework's own classes, since those lookups are process-wide by Objective-C's design and aren't ours to prefix. Our own classes are prefixed.
+- Interrupted gestures end on close, instead of asking the host to cope. Late messages from Dart are ignored.
+- A gesture reaches the host at its first value, not at pointer down. A tap on a knob therefore makes no undo step.
+- Saved state with a bad value is rejected whole. Clamping would silently change a user's project.
+
+### Branch cleanup
+
+Useful code was consolidated in `a140df6`, then these were deleted. They can be restored from these SHAs.
+
+| Branch | SHA |
+|---|---|
+| `flutter_ui` | `039802a1163a606acac31abd818b0533813c1dcf` |
+| `flutter_ui2` | `040e8db65537f049599eb7322d6ec76c57f6f28d` |
+| `rebrand` | `908c90f925ee7b7bcfab527e449d7ae87182c486` |
+| `ci/root-gate` | `fcab2e84ecb77f9af13ba7fc34e6ae2825dc4487` |
+| `fromSoloud` (local) | `d152d9e` |
