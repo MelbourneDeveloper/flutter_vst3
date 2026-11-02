@@ -265,6 +265,35 @@ struct LinuxFlutterHost {
         if (onFailure) onFailure();
     }
 
+    static GtkWidget* findEventBox(GtkWidget* widget) {
+        if (GTK_IS_EVENT_BOX(widget)) return widget;
+        if (!GTK_IS_CONTAINER(widget)) return nullptr;
+        GtkWidget* found = nullptr;
+        GList* children = gtk_container_get_children(GTK_CONTAINER(widget));
+        for (GList* child = children; child && !found; child = child->next) {
+            found = findEventBox(GTK_WIDGET(child->data));
+        }
+        g_list_free(children);
+        return found;
+    }
+
+    /// Ends Flutter's drag before its window hides. Its embedder would otherwise
+    /// wait for a release that goes elsewhere, and ignore the next press.
+    static void releasePointer() {
+        GtkWidget* box = findEventBox(sSharedPlug);
+        GdkWindow* window = box ? gtk_widget_get_window(box) : nullptr;
+        if (!window) return;
+        GdkEvent* event = gdk_event_new(GDK_BUTTON_RELEASE);
+        event->button.window = GDK_WINDOW(g_object_ref(window));
+        event->button.send_event = TRUE;
+        event->button.time = GDK_CURRENT_TIME;
+        event->button.button = 1;
+        event->button.state = GDK_BUTTON1_MASK;
+        gdk_event_set_device(event, gdk_seat_get_pointer(gdk_display_get_default_seat(gdk_window_get_display(window))));
+        gtk_widget_event(box, event);
+        gdk_event_free(event);
+    }
+
     void shutdown() {
         if (watchdog) { g_source_remove(watchdog); watchdog = 0; }
         if (idleSourceId != 0) {
@@ -276,6 +305,7 @@ struct LinuxFlutterHost {
             fl_method_channel_invoke_method(sSharedChannel, "onHostDetached", nullptr, nullptr, nullptr, nullptr);
         }
         if (sSharedPlug) {
+            releasePointer();
             gtk_widget_hide(sSharedPlug);
             auto* window = gtk_widget_get_window(sSharedPlug);
             auto* display = gdk_x11_get_default_xdisplay();

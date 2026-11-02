@@ -212,7 +212,8 @@ void displaySync() {
     }
     puts("PASS host to UI display sync and reopen");
 }
-void pointerCycle(Editor& a, RecordingHandler& handler, bool interrupted) {
+enum class Drag { completed, releasedWhileClosed, releasedAfterReopen };
+void pointerCycle(Editor& a, RecordingHandler& handler, Drag drag) {
     const bool flutter = a.width() == 600;
 #if defined(_WIN32)
     constexpr int nativeY = 112;
@@ -224,18 +225,31 @@ void pointerCycle(Editor& a, RecordingHandler& handler, bool interrupted) {
     platformPress(a.window, x, y);
     platformMove(a.window, flutter ? x : 200, flutter ? y - 25 : y);
     platformMove(a.window, flutter ? x : 350, flutter ? y - 50 : y);
-    interrupted ? a.view->removed() : (platformRelease(a.window, x, y), kResultTrue);
-    handler.balanced(a.controller->getParamNormalized(0));
-    if (interrupted) {
-        reattach(a); platformRelease(a.window, x, y);
+    if (drag == Drag::completed) {
+        platformRelease(a.window, x, y);
         handler.balanced(a.controller->getParamNormalized(0));
+        return;
     }
+    a.view->removed();
+    handler.balanced(a.controller->getParamNormalized(0));
+    if (drag == Drag::releasedWhileClosed) {
+        platformRelease(a.window, x, y); platformPump(500);
+        handler.balanced(a.controller->getParamNormalized(0));
+        reattach(a);
+        handler.balanced(a.controller->getParamNormalized(0));
+        return;
+    }
+    // Holding the button through a close and reopen is unusual, and the release
+    // can register as a click. It must not break the host's contract.
+    reattach(a); platformRelease(a.window, x, y); platformPump(1500);
+    handler.contractHolds();
 }
 void pointerGesture() {
     if (!platformCanCapture()) { puts("NOT RUN pointer: macOS injection unavailable"); return; }
     Editor a; platformPump(15000); RecordingHandler handler;
     a.controller->setComponentHandler(&handler);
-    pointerCycle(a, handler, false); pointerCycle(a, handler, true); pointerCycle(a, handler, false);
+    for (Drag drag : {Drag::completed, Drag::releasedWhileClosed, Drag::completed,
+                      Drag::releasedAfterReopen, Drag::completed}) pointerCycle(a, handler, drag);
     a.controller->setComponentHandler(nullptr); puts("PASS pointer completed and interrupted gestures");
 }
 void run(const std::string& mode) {

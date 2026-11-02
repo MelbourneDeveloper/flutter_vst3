@@ -203,8 +203,8 @@ public:
         if (onFailure) onFailure();
     }
 
-    /// A window that's hidden mid-drag never gets the button release, which leaves
-    /// Flutter's gesture open and its next drag with no begin.
+    /// Ends Flutter's drag before its window hides, so the drag can't depend on a
+    /// button release that may never reach that window.
     static void releasePointer() {
         if (GetCapture() != sSharedFlutterHwnd) return;
         POINT point{};

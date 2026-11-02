@@ -38,6 +38,17 @@ public:
         check(events[events.size()-2].value > 0.1, "drag did not increase");
         check(events[events.size()-2].value == finalValue, "drag controller value mismatch");
     }
+    /// What a host requires whatever the order: performs only inside a gesture,
+    /// no nesting, and nothing left open.
+    void contractHolds() {
+        bool open = false;
+        for (auto event : events) {
+            check(event.id == 0, "contract: wrong id");
+            check(event.kind == 'b' ? !open : open, "contract: event outside its gesture");
+            open = event.kind == 'b' || (event.kind == 'p' && open);
+        }
+        check(!open, "contract: gesture left open");
+    }
     void exactTriple(double value) {
         check(events.size() == 3, "gesture must contain exactly three events");
         check(events[0].kind == 'b' && events[0].id == 0, "begin(0)");
