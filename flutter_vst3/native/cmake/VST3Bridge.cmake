@@ -109,6 +109,17 @@ function(add_dart_vst3_plugin target_name dart_file)
         message(FATAL_ERROR "Dart compiler is required for code generation and native executable compilation")
     endif()
     
+    # Configure-time compilation must be repeated for every imported source,
+    # metadata edit, and template edit, including newly added Dart files.
+    file(GLOB_RECURSE DART_BUILD_INPUTS CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/lib/*.dart"
+        "${BRIDGE_DIR}/../lib/*.dart"
+        "${BRIDGE_DIR}/templates/*")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+        ${DART_BUILD_INPUTS}
+        "${CMAKE_CURRENT_SOURCE_DIR}/plugin_metadata.json"
+        "${BRIDGE_DIR}/../scripts/generate_plugin.dart")
+
     set(GENERATE_SCRIPT "${BRIDGE_DIR}/../scripts/generate_plugin.dart")
     if(NOT EXISTS ${GENERATE_SCRIPT})
         message(FATAL_ERROR "Code generator not found: ${GENERATE_SCRIPT}")

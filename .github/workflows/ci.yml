@@ -80,7 +80,7 @@ jobs:
       - name: Run on Windows
         if: runner.os == 'Windows'
         shell: pwsh
-        run: flutter_vst3/test/native/run.ps1
+        run: ./build.bat test-native
       - name: Run on Linux and macOS
         if: runner.os != 'Windows'
         run: bash flutter_vst3/test/native/run.sh
@@ -163,6 +163,44 @@ jobs:
       - name: Test
         run: make test-host test-graph
 
+  incremental-build:
+    name: incremental worker rebuild
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - uses: ./.github/actions/vst3-toolchain
+      - run: bash flutter_vst3/test/native/run_incremental_build.sh
+      - run: python3 flutter_vst3/test/native/generator_strings_test.py
+
+  windows-public-build:
+    name: Windows public build and install
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - uses: ./.github/actions/vst3-toolchain
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Public commands and installed workers
+        shell: pwsh
+        run: |
+          foreach ($target in @('reverb', 'echo', 'install')) {
+            & ./build.bat $target
+            if ($LASTEXITCODE -ne 0) { throw "build.bat $target failed ($LASTEXITCODE)" }
+          }
+          foreach ($plugin in @('echo', 'flutter_reverb')) {
+            $bundle = "$env:LOCALAPPDATA/Programs/Common/VST3/$plugin.vst3"
+            if (-not (Test-Path $bundle -PathType Container)) { throw "Missing $bundle" }
+            $workers = @(Get-ChildItem $bundle -Recurse -Filter "${plugin}_processor.exe")
+            if ($workers.Count -ne 1) { throw "Expected one installed $plugin worker, got $($workers.Count)" }
+          }
+
   ci:
     name: CI
     if: always()
@@ -175,6 +213,8 @@ jobs:
       - plugin-e2e
       - editor-e2e
       - native
+      - incremental-build
+      - windows-public-build
     runs-on: ubuntu-latest
     steps:
       - name: Fail if any required job failed or was cancelled

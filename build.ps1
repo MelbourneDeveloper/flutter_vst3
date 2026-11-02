@@ -53,7 +53,10 @@ function Build-Native {
 function Build-Plugin {
     param([string]$Name)
     Plugin-Deps $Name
-    Package-Command "vsts/$Name" 'flutter' @('build', 'windows', '--release')
+    $metadata = Get-Content "vsts/$Name/plugin_metadata.json" -Raw | ConvertFrom-Json
+    if ($metadata.flutterEntrypoint) {
+        Package-Command "vsts/$Name" 'flutter' @('build', 'windows', '--release')
+    }
     Invoke-Checked 'cmake' @('-S', "vsts/$Name", '-B', "vsts/$Name/build", '-DCMAKE_BUILD_TYPE=Release')
     Invoke-Checked 'cmake' @('--build', "vsts/$Name/build", '--config', 'Release')
 }
@@ -61,7 +64,7 @@ function Build-Plugin {
 function Run-Tests {
     Build-Native
     Dart-Deps
-    Invoke-Checked 'bash' @('flutter_vst3/test/native/run.sh')
+    Invoke-Checked 'powershell' @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'flutter_vst3/test/native/run.ps1')
     foreach ($p in @('dart_vst_host', 'dart_vst_graph')) {
         Package-Command $p 'dart' @('test')
     }
@@ -99,7 +102,7 @@ switch ($Target.ToLower()) {
     'reverb-deps' { Plugin-Deps 'flutter_reverb' }
     'echo-deps' { Plugin-Deps 'echo' }
     'test' { Run-Tests }
-    'test-native' { Invoke-Checked 'bash' @('flutter_vst3/test/native/run.sh') }
+    'test-native' { Invoke-Checked 'powershell' @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'flutter_vst3/test/native/run.ps1') }
     'test-host' { Build-Native; Package-Command 'dart_vst_host' 'dart' @('test') }
     'test-graph' { Build-Native; Package-Command 'dart_vst_graph' 'dart' @('test') }
     'clean' { Clean-Native; Clean-Plugin }

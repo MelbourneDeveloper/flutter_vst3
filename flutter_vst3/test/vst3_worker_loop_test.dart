@@ -78,6 +78,7 @@ void main() {
     }
     expect(processor.calls, ['96000.0/256', 'reset', 'process/8']);
     final originals = [views.inL, views.inR, views.outL, views.outR];
+    _assertRouting(memory, originals);
     views.resize(8);
     final current = [views.inL, views.inR, views.outL, views.outR];
     for (var i = 0; i < 4; i++) {
@@ -101,6 +102,24 @@ void main() {
     expect(() => throwIfSemFailed(Pointer.fromAddress(1234), 'test'),
         returnsNormally);
   });
+}
+
+void _assertRouting(Pointer<Uint8> memory, List<Float32List> views) {
+  final offsets = [vst3OffsetInputL, vst3OffsetInputR,
+    vst3OffsetOutputL, vst3OffsetOutputR];
+  for (var channel = 0; channel < 4; channel++) {
+    final raw = Pointer<Float>.fromAddress(memory.address + offsets[channel]);
+    for (var sample = 0; sample < 8; sample++) {
+      raw[sample] = channel * 100 + sample + 0.25;
+    }
+  }
+  for (var channel = 0; channel < 4; channel++) {
+    expect(views[channel],
+        [for (var sample = 0; sample < 8; sample++) channel * 100 + sample + 0.25]);
+    views[channel][7] = channel * 1000 + 0.5;
+    expect(Pointer<Float>.fromAddress(memory.address + offsets[channel])[7],
+        channel * 1000 + 0.5);
+  }
 }
 
 void _wrapProbe(SendPort port) {

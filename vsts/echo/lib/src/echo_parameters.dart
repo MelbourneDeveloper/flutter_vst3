@@ -8,7 +8,8 @@ class EchoParameters {
   /// Controls the delay time in milliseconds (0ms to 1000ms)
   double delayTime = 0.5;
   
-  /// Controls the feedback amount (0% = single echo, 100% = infinite)
+  /// Controls decaying feedback (0% = single echo, 100% = stable 0.85 loop gain,
+  /// 15% decay per repeat).
   double feedback = 0.3;
   
   /// Controls the wet/dry mix (0% = dry only, 100% = wet only)

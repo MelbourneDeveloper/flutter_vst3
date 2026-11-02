@@ -3,6 +3,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+/// Generates native plugin sources from the command-line metadata directory.
 void main(List<String> args) {
   if (args.length < 3 || args.length > 4) {
     print('USAGE: generate_plugin.dart <plugin_dir> <plugin_name> <target_name> [build_dir]');
@@ -23,6 +24,7 @@ void main(List<String> args) {
   }
 }
 
+/// Writes native sources and CMake metadata, rejecting unsupported metadata.
 void generatePluginFiles(String pluginDir, String pluginName, String targetName, String? buildDir) {
   // Read metadata JSON  
   final metadataFile = File('$pluginDir/plugin_metadata.json');
@@ -43,6 +45,10 @@ void generatePluginFiles(String pluginDir, String pluginName, String targetName,
   final parameters = (metadata['parameters'] as List? ?? [])
       .cast<Map<String, dynamic>>();
   _validateParameterIds(parameters);
+  _validateNames(parameters);
+  _validateTarget(targetName);
+  _validateTarget(pluginName);
+  _validateMetadata(metadata, parameters);
 
   // Generate files
   final genDir = buildDir != null 
@@ -62,16 +68,16 @@ void generatePluginFiles(String pluginDir, String pluginName, String targetName,
   
   // Base replacements
   final replacements = {
-    '{{PLUGIN_NAME}}': metadata['pluginName'],
+    '{{PLUGIN_NAME}}': _cpp(metadata['pluginName']),
     '{{PLUGIN_NAME_UPPER}}': pluginName.toUpperCase(),
     '{{PLUGIN_NAME_CAMEL}}': pluginClass,
     '{{PLUGIN_CLASS_NAME}}': pluginClass,
     '{{PLUGIN_ID}}': pluginName,
-    '{{COMPANY_NAME}}': metadata['vendor'],
-    '{{PLUGIN_URL}}': metadata['companyWeb'],
-    '{{PLUGIN_EMAIL}}': metadata['companyEmail'],
-    '{{PLUGIN_CATEGORY}}': metadata['category'],
-    '{{PLUGIN_VERSION}}': metadata['version'],
+    '{{COMPANY_NAME}}': _cpp(metadata['vendor']),
+    '{{PLUGIN_URL}}': _cpp(metadata['companyWeb']),
+    '{{PLUGIN_EMAIL}}': _cpp(metadata['companyEmail']),
+    '{{PLUGIN_CATEGORY}}': _cpp(metadata['category']),
+    '{{PLUGIN_VERSION}}': _cpp(metadata['version']),
   };
   
   // Add generated C++ code
@@ -137,7 +143,7 @@ Map<String, String> _generateCppSnippets(List<Map<String, dynamic>> parameters, 
   // Generate controller parameter registration
   final controllerInit = parameters.map((p) {
     final title = (p['name'] as String).replaceAll('_', ' ').split(' ').map((word) => word.isEmpty ? '' : word[0].toUpperCase() + word.substring(1)).join(' ');
-    return '        parameters.addParameter(STR16("$title"), STR16("${p['units']}"), 0, ${p['defaultValue']}, ParameterInfo::kCanAutomate, ${p['id']});';
+    return '        parameters.addParameter(STR16("${_cpp(title)}"), STR16("${_cpp(p['units'])}"), 0, ${p['defaultValue']}, ParameterInfo::kCanAutomate, ${p['id']});';
   }).join('\n');
   
   // Generate parameter info getter
@@ -145,9 +151,9 @@ Map<String, String> _generateCppSnippets(List<Map<String, dynamic>> parameters, 
     final title = (p['name'] as String).replaceAll('_', ' ').split(' ').map((word) => word.isEmpty ? '' : word[0].toUpperCase() + word.substring(1)).join(' ');
     return '''        case ${p['id']}:
             info.id = ${p['id']};
-            info.title = STR16("$title");
-            info.shortTitle = STR16("$title");
-            info.units = STR16("${p['units']}");
+            info.title = STR16("${_cpp(title)}");
+            info.shortTitle = STR16("${_cpp(title)}");
+            info.units = STR16("${_cpp(p['units'])}");
             info.stepCount = 0;
             info.defaultNormalizedValue = ${p['defaultValue']};
             info.flags = ParameterInfo::kCanAutomate;
@@ -172,7 +178,7 @@ void _generateIdsHeader(Directory genDir, String targetName, String pluginClass,
 
 using namespace Steinberg;
 
-// Parameter IDs for ${metadata['pluginName']}
+// Parameter IDs for ${_comment(metadata['pluginName'])}
 enum ${pluginClass}Parameters {
 ${parameters.map((p) => '    k${_toPascalCase(p['name'] as String)}Param = ${p['id']},').join('\n')}
     kNumParameters = ${parameters.length}
@@ -188,6 +194,7 @@ static const FUID k${pluginClass}ControllerUID(${pluginUid('${metadata['bundleId
 }
 
 void _generateCMakeMetadata(Directory genDir, Map<String, dynamic> metadata, List<Map<String, dynamic>> parameters) {
+  metadata = metadata.map((key, value) => MapEntry(key, value is String ? _cmake(value) : value));
   final content = '''set(JSON_PLUGIN_NAME "${metadata['pluginName']}")
 set(JSON_VENDOR "${metadata['vendor']}")
 set(JSON_VERSION "${metadata['version']}")
@@ -224,6 +231,47 @@ String pluginUid(String key) {
   }).join(', ');
 }
 
-String _toPascalCase(String input) {
-  return input.split('_').map((word) => word.isEmpty ? '' : word[0].toUpperCase() + word.substring(1)).join('');
+String _toPascalCase(String input) => _identifier(input);
+
+String _identifier(String input) {
+  final words = input.split(RegExp(r'[^a-zA-Z0-9]+')).where((w) => w.isNotEmpty);
+  final result = words.map((w) => w[0].toUpperCase() + w.substring(1)).join();
+  return RegExp(r'^[A-Za-z][A-Za-z0-9]*$').hasMatch(result)
+      ? result : throw FormatException('Metadata error: unusable identifier: $input');
 }
+
+void _validateNames(List<Map<String, dynamic>> parameters) {
+  final seen = <String>{'NumParameters'};
+  for (final parameter in parameters) {
+    final name = _identifier(parameter['name'] as String);
+    seen.add(name) ? null : throw FormatException('Metadata error: duplicate parameter identifier $name');
+  }
+}
+
+void _validateTarget(String value) =>
+    RegExp(r'^[A-Za-z_][A-Za-z0-9_]*$').hasMatch(value)
+        ? null : throw FormatException('Metadata error: invalid target: $value');
+
+void _validateMetadata(Map<String, dynamic> metadata, List<Map<String, dynamic>> parameters) {
+  for (final key in ['pluginName', 'vendor', 'version', 'category', 'bundleIdentifier', 'companyWeb', 'companyEmail']) {
+    _validateText(metadata[key]);
+  }
+  for (final p in parameters) {
+    p['id'] is int ? null : throw const FormatException('Metadata error: parameter id must be an integer');
+    _validateText(p['name']);
+    _validateText(p['units']);
+    final value = p['defaultValue'];
+    value is num && value.isFinite && value >= 0 && value <= 1
+        ? null : throw FormatException('Metadata error: invalid parameter default: $value');
+  }
+}
+
+void _validateText(dynamic value) => value is String && !value.contains(RegExp(r'[\x00-\x1f\x7f]'))
+    ? null : throw const FormatException('Metadata error: expected text without control characters');
+
+String _cpp(dynamic value) => value.toString().replaceAll(r'\', r'\\')
+    .replaceAll('"', r'\"').replaceAll('\n', r'\n').replaceAll('\r', r'\r');
+
+String _comment(dynamic value) => _cpp(value).endsWith(r'\') ? '${_cpp(value)} ' : _cpp(value);
+
+String _cmake(dynamic value) => _cpp(value).replaceAll(r'$', r'\$').replaceAll(';', r'\;');

@@ -60,35 +60,59 @@ class VST3ParameterBinding {
   }
 
   /// Loads current parameter values from the VST3 EditController.
+  ///
+  /// Running without a host, as `flutter run` does, is not an error: there's
+  /// no channel, and the cache stays as it is. A bad reply from a host throws.
   Future<void> loadInitialParameters() async {
     try {
-      final map = await _channel.invokeMapMethod<dynamic, dynamic>(
-        'getInitialParameters',
+      _applyInitial(
+        await _channel.invokeMethod<Object?>('getInitialParameters'),
       );
-      if (map != null) {
-        map.forEach((k, v) {
-          final id = k is num ? k.toInt() : int.tryParse(k.toString());
-          final val = (v as num?)?.toDouble();
-          if (id != null && val != null) {
-            _parameters[id] = val;
-          }
-        });
-        notifyListeners();
-      }
     } on MissingPluginException {
-      // Standalone Flutter has no host channel.
+      return;
     }
   }
 
-  void _handleParamChanged(dynamic arguments) {
-    final args = arguments as Map?;
-    final id = args?['id'] as int?;
-    final val = (args?['value'] as num?)?.toDouble();
-    if (id != null && val != null) {
-      _parameters[id] = val;
-      notifyListeners();
+  void _applyInitial(Object? reply) {
+    final map = switch (reply) {
+      Map value => value,
+      _ => throw ArgumentError('Expected initial parameter map'),
+    };
+    final validated = <int, double>{};
+    for (final entry in map.entries) {
+      validated[_initialId(entry.key)] = _validatedValue(entry.value);
     }
+    _parameters.addAll(validated);
+    notifyListeners();
   }
+
+  void _handleParamChanged(dynamic arguments) {
+    final args = switch (arguments) {
+      Map value => value,
+      _ => throw ArgumentError('Expected parameter message map'),
+    };
+    final id = _validatedId(args['id']);
+    final value = _validatedValue(args['value']);
+    _parameters[id] = value;
+    notifyListeners();
+  }
+
+  int _initialId(Object? key) => switch (key) {
+    String text when RegExp(r'^(0|[1-9][0-9]*)$').hasMatch(text) =>
+      _validatedId(int.tryParse(text)),
+    _ => _validatedId(key),
+  };
+
+  int _validatedId(Object? id) => switch (id) {
+    int value when value >= 0 && value < parameterCount => value,
+    _ => throw ArgumentError.value(id, 'id', 'Invalid parameter ID'),
+  };
+
+  double _validatedValue(Object? value) => switch (value) {
+    num number when number.isFinite && number >= 0 && number <= 1 =>
+      number.toDouble(),
+    _ => throw ArgumentError.value(value, 'value', 'Expected normalized value'),
+  };
 
   void _handleWaveform(dynamic arguments) {
     final list = arguments as List<dynamic>?;
@@ -133,21 +157,25 @@ class VST3ParameterBinding {
   }
 
   /// Begins one host automation gesture.
-  Future<void> beginEdit(int id) =>
-      _channel.invokeMethod<void>('beginEdit', {'id': id});
+  Future<void> beginEdit(int id) => _send('beginEdit', {'id': id});
 
   /// Ends one host automation gesture.
-  Future<void> endEdit(int id) =>
-      _channel.invokeMethod<void>('endEdit', {'id': id});
+  Future<void> endEdit(int id) => _send('endEdit', {'id': id});
+
+  /// Without a host there's no channel to send to, which isn't an error.
+  Future<void> _send(String method, Map<String, Object> arguments) async {
+    try {
+      await _channel.invokeMethod<void>(method, arguments);
+    } on MissingPluginException {
+      return;
+    }
+  }
 
   /// Sets parameter value from UI and notifies the VST3 EditController.
   Future<void> setParameter(int id, double value) async {
     final clamped = value.clamp(0.0, 1.0);
     _parameters[id] = clamped;
-    await _channel.invokeMethod<void>('setParameter', {
-      'id': id,
-      'value': clamped,
-    });
+    await _send('setParameter', {'id': id, 'value': clamped});
     notifyListeners();
   }
 

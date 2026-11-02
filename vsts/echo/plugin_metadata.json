@@ -20,7 +20,7 @@
       "id": 1,
       "name": "feedback",
       "displayName": "Feedback",
-      "description": "Controls the feedback amount (0% = single echo, 100% = infinite)",
+      "description": "Controls decaying feedback (0% = single echo, 100% = stable 0.85 loop gain, 15% decay per repeat)",
       "defaultValue": 0.3,
       "units": "%"
     },

@@ -88,12 +88,7 @@ make clean reverb-vst
 
 **Manual Native Library Build:**
 ```bash
-cd native/
-mkdir build && cd build
-cmake ..
-make
-# Copies libdart_vst_host.dylib to project root for Dart tests
-cp libdart_vst_host.dylib ../../
+make native  # Builds both native libraries and copies them to the package directories
 ```
 
 **VST3 Plugins (auto-generated from Dart parameter definitions):**
@@ -119,16 +114,16 @@ make
 make dart-deps
 
 # Or manually:
-cd dart_vst_host/ && dart pub get
-cd dart_vst_graph/ && dart pub get
-cd dart_vst3_bridge/ && dart pub get
+(cd dart_vst_host/ && dart pub get)
+(cd dart_vst_graph/ && dart pub get)
+(cd flutter_vst3/ && flutter pub get)
 ```
 
 **Flutter UI:**
 ```bash
 make flutter-deps
-cd flutter_ui/
-flutter run
+cd vsts/echo/
+GDK_BACKEND=x11 flutter run -d linux  # Linux; use flutter run on macOS/Windows
 ```
 
 ## Testing
@@ -144,10 +139,10 @@ make test-host     # dart_vst_host tests
 make test-graph    # dart_vst_graph tests
 
 # Manual test runs:
-cd dart_vst_host/ && dart test
-cd dart_vst_graph/ && dart test
-cd vsts/flutter_reverb/ && dart test
-cd vsts/echo/ && dart test
+(cd dart_vst_host/ && dart test)
+(cd dart_vst_graph/ && dart test)
+(cd vsts/flutter_reverb/ && flutter test)
+(cd vsts/echo/ && flutter test)
 ```
 
 **Important:** Tests require the native library to be built and present in the working directory. The test framework will fail with a clear error message if `libdart_vst_host.dylib` is missing.
@@ -199,7 +194,7 @@ add_dart_vst3_plugin(flutter_reverb reverb_parameters.dart
 1. Run `./setup.sh` for first-time setup (downloads SDK, builds native library)
 2. Use `make` to build Flutter Dart Reverb VST3 plugin  
 3. Use `make test` to run all tests and verify FFI bindings
-4. Use Flutter UI (`make run-flutter`) for interactive testing
+4. Use Echo's Flutter UI (`cd vsts/echo && flutter run`) for interactive testing
 5. Build individual VST plugins in their respective `vsts/` directories
 6. Each plugin package is self-contained and builds its own .vst3 bundle
 7. Tests will fail loudly if native dependencies are missing

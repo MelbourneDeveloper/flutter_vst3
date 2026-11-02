@@ -112,7 +112,7 @@ sequenceDiagram
 **Primary Purpose: Build VST® 3 plugins with Flutter UIs that compile to .vst3 bundles**
 
 - **`flutter_vst3`** - Complete framework that auto-generates all C++ VST® 3 boilerplate from Dart
-- **`vsts/flutter_reverb`** - Example VST® 3 reverb plugin with Flutter UI  
+- **`vsts/flutter_reverb`** - Example VST® 3 reverb plugin with native sliders (no standalone Flutter app)  
 - **`vsts/echo`** - Example VST® 3 echo/delay plugin with Flutter UI
 - **Native Executable Compilation** - Dart compiles to native machine code (no runtime required)
 
@@ -353,7 +353,7 @@ flutter_vst3_toolkit/
 ### VST® Plugin Development
 1. Design UI in Flutter with hot reload
 2. Implement audio processing in pure Dart
-3. Test with `flutter run`
+3. Test with `flutter test`; plugins with a Flutter entrypoint can also use `flutter run`
 4. Build VST® 3: `make echo-vst`
 5. Load in DAW and test
 
@@ -383,16 +383,16 @@ make test             # macOS / Linux
 build.bat test        # Windows (or .\build.ps1 test)
 
 # Test individual packages
-cd flutter_vst3 && dart test
-cd vsts/echo && dart test
-cd dart_vst_host && dart test
-cd dart_vst_graph && dart test
+(cd flutter_vst3 && flutter test)
+(cd vsts/echo && flutter test)
+(cd dart_vst_host && dart test)
+(cd dart_vst_graph && dart test)
 
 # Interactive testing with example plugins
 # (On Linux, set GDK_BACKEND=x11 so native VST3 GUIs can be displayed)
-cd vsts/flutter_reverb && flutter run
+# Reverb has no standalone app: build with make reverb-vst and load in a VST3 host.
 # On Linux:
-cd vsts/echo && GDK_BACKEND=x11 flutter run
+(cd vsts/echo && GDK_BACKEND=x11 flutter run)
 ```
 
 ## Contributing
