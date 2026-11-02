@@ -17,6 +17,11 @@ inline uintptr_t localShmAddress(int64_t address, int64_t sender, int64_t curren
 /// Tracks balanced gestures and suppresses host-to-view feedback while editing.
 class EditState {
 public:
+    std::set<uint32_t> takeOpen() {
+        std::set<uint32_t> result;
+        result.swap(editing_);
+        return result;
+    }
     bool begin(uint32_t id) { return editing_.insert(id).second; }
     bool end(uint32_t id) { return editing_.erase(id) != 0; }
     bool shouldEcho(uint32_t id) const { return editing_.count(id) == 0; }
@@ -27,5 +32,6 @@ private:
 struct ShmAddressSource {
     virtual ~ShmAddressSource() = default;
     virtual uintptr_t sharedMemoryAddress() const = 0;
+    virtual void endOpenEdits() = 0;
 };
 }

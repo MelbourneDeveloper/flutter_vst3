@@ -50,6 +50,10 @@ bool platformHasVisibleChild(void* window) {
     return false;
 }
 // Reading a Metal layer back needs a screen recording permission that CI lacks.
+void platformPress(void*, int, int) { throw std::runtime_error("macOS pointer unsupported"); }
+void platformMove(void*, int, int) { throw std::runtime_error("macOS pointer unsupported"); }
+void platformRelease(void*, int, int) { throw std::runtime_error("macOS pointer unsupported"); }
+unsigned long long platformCaptureHash(void*) { throw std::runtime_error("macOS capture unsupported"); }
 bool platformCanCapture() { return false; }
 bool platformRendered(void*) {
     throw std::runtime_error("Rendering cannot be captured on macOS");

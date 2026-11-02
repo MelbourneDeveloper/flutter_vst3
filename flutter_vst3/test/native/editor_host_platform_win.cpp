@@ -55,6 +55,37 @@ bool platformHasVisibleChild(void* window) {
     EnumChildWindows(asWindow(window), findVisible, reinterpret_cast<LPARAM>(&found));
     return found;
 }
+unsigned long long platformCaptureHash(void* window) {
+    RECT r; check(GetWindowRect(asWindow(window), &r), "capture rect");
+    HDC screen = GetDC(nullptr), memory = CreateCompatibleDC(screen);
+    HBITMAP bitmap = CreateCompatibleBitmap(screen, 540, 180);
+    auto old = SelectObject(memory, bitmap);
+    check(BitBlt(memory, 0, 0, 540, 180, screen, r.left, r.top + 60, SRCCOPY), "capture BitBlt");
+    unsigned long long hash = 14695981039346656037ULL;
+    for (int y = 0; y < 180; ++y) for (int x = 0; x < 540; ++x) {
+        auto pixel = GetPixel(memory, x, y); check(pixel != CLR_INVALID, "capture GetPixel");
+        for (int b = 0; b < 4; ++b) { hash ^= (pixel >> (b * 8)) & 255; hash *= 1099511628211ULL; }
+    }
+    SelectObject(memory, old); DeleteObject(bitmap); DeleteDC(memory); ReleaseDC(nullptr, screen);
+    return hash;
+}
+void platformMove(void* window, int x, int y) {
+    RECT r; check(GetWindowRect(asWindow(window), &r), "pointer rect");
+    INPUT input{}; input.type = INPUT_MOUSE;
+    input.mi.dx = (r.left + x) * 65535 / (GetSystemMetrics(SM_CXSCREEN) - 1);
+    input.mi.dy = (r.top + y) * 65535 / (GetSystemMetrics(SM_CYSCREEN) - 1);
+    input.mi.dwFlags = MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE;
+    check(SendInput(1, &input, sizeof(input)) == 1, "SendInput move"); platformPump(150);
+}
+void platformButton(void* window, int x, int y, DWORD flags) {
+    platformMove(window, x, y); INPUT input{}; input.type = INPUT_MOUSE; input.mi.dwFlags = flags;
+    check(SendInput(1, &input, sizeof(input)) == 1, "SendInput button"); platformPump(150);
+}
+void platformPress(void* w, int x, int y) { platformButton(w, x, y, MOUSEEVENTF_LEFTDOWN); }
+void platformRelease(void*, int, int) {
+    INPUT input{}; input.type = INPUT_MOUSE; input.mi.dwFlags = MOUSEEVENTF_LEFTUP;
+    check(SendInput(1, &input, sizeof(input)) == 1, "SendInput release"); platformPump(150);
+}
 bool platformCanCapture() { return true; }
 // Reads the screen, since a swap chain's pixels don't reach the window's own DC.
 bool platformRendered(void* window) {

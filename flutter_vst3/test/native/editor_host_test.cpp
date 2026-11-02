@@ -3,6 +3,9 @@
 #include <memory>
 #include <string>
 #include "editor_host_platform.h"
+#include "editor_host_recording.h"
+#include "public.sdk/source/vst/vsteditcontroller.h"
+#include "public.sdk/source/common/memorystream.h"
 #include "pluginterfaces/vst/ivsteditcontroller.h"
 #include "pluginterfaces/vst/ivstcomponent.h"
 #include "pluginterfaces/vst/ivstaudioprocessor.h"
@@ -78,6 +81,9 @@ struct Editor {
         check(view != nullptr, "createView");
         window = platformCreateWindow();
         check(view->setFrame(platformFrame()) == kResultTrue, "setFrame");
+        check(view->attached(window, "unsupported-editor-platform") != kResultTrue, "unsupported platform must not attach");
+        platformPump(500);
+        check(!platformHasVisibleChild(window), "unsupported platform created a child or pending startup");
         check(view->attached(window, platformViewType()) == kResultTrue, "attached");
     }
     ~Editor() {
@@ -126,7 +132,93 @@ void reopenSameView() {
     check(secondary.width() == 600 && secondary.child(), "same view kept stale native host/size");
     puts("PASS B13 same view chooses Flutter again");
 }
+void interruptedGesture() {
+    Editor a; platformPump(1500);
+    RecordingHandler handler;
+    a.controller->setComponentHandler(&handler);
+    auto* controller = dynamic_cast<EditController*>(a.controller.get());
+    check(controller != nullptr, "EditController cast");
+    controller->beginEdit(0); controller->performEdit(0, 0.37);
+    a.view->removed(); handler.exactTriple(0.37);
+    controller->endEdit(0); handler.exactTriple(0.37);
+    check(a.view->attached(a.window, platformViewType()) == kResultTrue, "gesture reattach");
+    platformPump(1500); handler.events.clear();
+    controller->beginEdit(0); controller->performEdit(0, 0.61);
+    a.view->removed(); handler.exactTriple(0.61);
+    a.controller->setComponentHandler(nullptr);
+    puts("PASS interrupted gesture and fresh begin after reattach");
+}
+unsigned long long settledImage(void* window) {
+    platformPump(300);
+    auto previous = platformCaptureHash(window);
+    for (int i = 0; i < 40; ++i) {
+        platformPump(100);
+        auto current = platformCaptureHash(window);
+        if (current == previous) return current;
+        previous = current;
+    }
+    check(false, "parameter image never settled"); return 0;
+}
+void displayCycle(Editor& a) {
+    a.controller->setParamNormalized(0, 0.1); auto low = settledImage(a.window);
+    a.controller->setParamNormalized(0, 0.9); auto high = settledImage(a.window);
+    check(low != high, "parameter 0 display unchanged between 0.1 and 0.9");
+    MemoryStream state;
+    check(a.controller->getState(&state) == kResultTrue, "capture 0.9 state");
+    a.controller->setParamNormalized(0, 0.1);
+    check(settledImage(a.window) == low, "parameter 0 display did not return to 0.1");
+    state.seek(0, IBStream::kIBSeekSet, nullptr);
+    check(a.controller->setComponentState(&state) == kResultTrue, "restore 0.9 state");
+    check(a.controller->getParamNormalized(0) == 0.9, "state parameter 0 value");
+    check(settledImage(a.window) == high, "restored state display differs from 0.9");
+    a.controller->setParamNormalized(0, 1.0); auto top = settledImage(a.window);
+    a.controller->setParamNormalized(0, 0.1); settledImage(a.window);
+    a.controller->setParamNormalized(0, 1.5);
+    check(a.controller->getParamNormalized(0) == 1.0, "out-of-range value not clamped");
+    check(settledImage(a.window) == top, "out-of-range value must display as its clamped value");
+}
+void reattach(Editor& a) {
+    check(a.view->attached(a.window, platformViewType()) == kResultTrue, "reattach");
+    platformPump(1500);
+}
+void displaySync() {
+    if (!platformCanCapture()) { puts("NOT RUN display sync: platform cannot capture"); return; }
+    Editor a; platformPump(2000);
+    for (int cycle = 0; cycle < 2; ++cycle) {
+        displayCycle(a); a.view->removed(); reattach(a);
+    }
+    puts("PASS host to UI display sync and reopen");
+}
+void pointerCycle(Editor& a, RecordingHandler& handler, bool interrupted) {
+    const bool flutter = a.width() == 600;
+#if defined(_WIN32)
+    constexpr int nativeY = 112;
+#else
+    constexpr int nativeY = 145;
+#endif
+    const int x = flutter ? 137 : 82, y = flutter ? 254 : nativeY;
+    a.controller->setParamNormalized(0, 0.1); platformPump(500); handler.events.clear();
+    platformPress(a.window, x, y);
+    platformMove(a.window, flutter ? x : 200, flutter ? y - 25 : y);
+    platformMove(a.window, flutter ? x : 350, flutter ? y - 50 : y);
+    interrupted ? a.view->removed() : (platformRelease(a.window, x, y), kResultTrue);
+    handler.balanced(a.controller->getParamNormalized(0));
+    if (interrupted) {
+        reattach(a); platformRelease(a.window, x, y);
+        handler.balanced(a.controller->getParamNormalized(0));
+    }
+}
+void pointerGesture() {
+    if (!platformCanCapture()) { puts("NOT RUN pointer: macOS injection unavailable"); return; }
+    Editor a; platformPump(15000); RecordingHandler handler;
+    a.controller->setComponentHandler(&handler);
+    pointerCycle(a, handler, false); pointerCycle(a, handler, true); pointerCycle(a, handler, false);
+    a.controller->setComponentHandler(nullptr); puts("PASS pointer completed and interrupted gestures");
+}
 void run(const std::string& mode) {
+    if (mode != "garbage") displaySync();
+    if (mode != "garbage") pointerGesture();
+    if (mode != "garbage") interruptedGesture();
     if (mode == "good") {
         { Editor a; platformPump(15000); check(a.width() == 600 && a.child(), "B12/B14 Dart did not start");
           puts("PASS B12/B14 positive"); }

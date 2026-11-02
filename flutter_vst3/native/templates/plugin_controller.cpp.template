@@ -54,7 +54,7 @@ public:
     tresult PLUGIN_API setParamNormalized(ParamID id, ParamValue value) override {
         tresult result = EditController::setParamNormalized(id, value);
         if (activeView_ && editing_.shouldEcho(id)) {
-            activeView_->updateParameter(id, value);
+            activeView_->updateParameter(id, EditController::getParamNormalized(id));
         }
         return result;
     }
@@ -83,6 +83,10 @@ public:
 
     tresult PLUGIN_API beginEdit(ParamID id) override {
         return editing_.begin(id) ? EditController::beginEdit(id) : kResultTrue;
+    }
+
+    void endOpenEdits() override {
+        for (auto id : editing_.takeOpen()) EditController::endEdit(id);
     }
 
     tresult PLUGIN_API endEdit(ParamID id) override {

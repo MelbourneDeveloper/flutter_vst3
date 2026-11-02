@@ -112,7 +112,7 @@ public:
     }
 
     tresult PLUGIN_API attached(void* parent, FIDString type) override {
-        if (!parent || !type) return kInvalidArgument;
+        if (!parent || isPlatformTypeSupported(type) != kResultTrue) return kInvalidArgument;
         parentView_ = parent;
         if (viewHolder_) *viewHolder_ = this;
         size_.reset();
@@ -157,6 +157,7 @@ public:
     }
 
     tresult PLUGIN_API removed() override {
+        endControllerEdits(controller_);
         cleanup();
         if (viewHolder_ && *viewHolder_ == this) *viewHolder_ = nullptr;
         return kResultTrue;

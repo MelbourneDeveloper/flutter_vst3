@@ -2,6 +2,7 @@
 #include "editor_host_platform.h"
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
+#include <X11/extensions/XTest.h>
 #include <poll.h>
 #include <unistd.h>
 #include <algorithm>
@@ -94,6 +95,31 @@ bool platformHasVisibleChild(void* window) {
     }
     if (children) XFree(children);
     return mapped;
+}
+unsigned long long platformCaptureHash(void* window) {
+    XImage* image = XGetImage(display, asWindow(window), 0, 60, 540, 180, AllPlanes, ZPixmap);
+    check(image != nullptr, "parameter XGetImage");
+    unsigned long long hash = 14695981039346656037ULL;
+    for (int y = 0; y < 180; ++y) for (int x = 0; x < 540; ++x) {
+        auto pixel = XGetPixel(image, x, y);
+        for (int b = 0; b < 4; ++b) { hash ^= (pixel >> (b * 8)) & 255; hash *= 1099511628211ULL; }
+    }
+    XDestroyImage(image); return hash;
+}
+void platformMove(void* window, int x, int y) {
+    Window child; int sx, sy;
+    check(XTranslateCoordinates(display, asWindow(window), DefaultRootWindow(display), x, y, &sx, &sy, &child), "pointer coordinates");
+    check(XTestFakeMotionEvent(display, -1, sx, sy, CurrentTime), "XTest motion");
+    XFlush(display); platformPump(150);
+}
+void platformPress(void* window, int x, int y) {
+    platformMove(window, x, y);
+    check(XTestFakeButtonEvent(display, 1, True, CurrentTime), "XTest press");
+    XFlush(display); platformPump(150);
+}
+void platformRelease(void*, int, int) {
+    check(XTestFakeButtonEvent(display, 1, False, CurrentTime), "XTest release");
+    XFlush(display); platformPump(150);
 }
 bool platformCanCapture() { return true; }
 bool platformRendered(void* window) {

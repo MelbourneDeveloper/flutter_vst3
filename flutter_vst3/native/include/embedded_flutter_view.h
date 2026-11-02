@@ -36,6 +36,11 @@ namespace Vst {
         return source ? source->sharedMemoryAddress() : 0;
     }
 
+    inline void endControllerEdits(EditController* controller) {
+        auto* source = dynamic_cast<flutter_vst3::ShmAddressSource*>(controller);
+        if (source) source->endOpenEdits();
+    }
+
     /// Interface implemented by native UI views (Cocoa/Win32/X11) to receive
     /// parameter updates directly from the VST3 EditController.
     class IEmbeddedFlutterView {

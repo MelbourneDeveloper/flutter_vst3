@@ -117,6 +117,7 @@ public:
     }
 
     tresult PLUGIN_API removed() override {
+        endControllerEdits(controller_);
         cleanup();
         if (viewHolder_ && *viewHolder_ == this) *viewHolder_ = nullptr;
         return kResultTrue;

@@ -64,8 +64,8 @@ public:
     }
 
     void shutdown() {
-        for (const auto& row : rows)
-            if (row.editing && controller) controller->endEdit(row.id);
+        for (auto& row : rows)
+            row.editing = false;
         if (hwnd) {
             SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
             DestroyWindow(hwnd);

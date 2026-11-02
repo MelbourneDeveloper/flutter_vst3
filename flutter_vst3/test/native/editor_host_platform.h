@@ -35,3 +35,10 @@ bool platformHasVisibleChild(void* window);
 bool platformCanCapture();
 /// Whether the window shows more than one colour.
 bool platformRendered(void* window);
+unsigned long long platformCaptureHash(void* window);
+void platformPress(void* window, int x, int y);
+void platformMove(void* window, int x, int y);
+void platformRelease(void* window, int x, int y);
+inline void platformDrag(void* window, int x0, int y0, int x1, int y1) {
+    platformPress(window, x0, y0); platformMove(window, x1, y1); platformRelease(window, x1, y1);
+}

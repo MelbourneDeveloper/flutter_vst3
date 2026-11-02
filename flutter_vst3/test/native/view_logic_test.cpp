@@ -47,6 +47,15 @@ void testStartupDecision() {
     }
 }
 int main() {
+    flutter_vst3::EditState interrupted;
+    require(interrupted.begin(7));
+    require(interrupted.begin(2));
+    require(interrupted.takeOpen() == std::set<uint32_t>({2, 7}));
+    require(interrupted.takeOpen().empty());
+    require(interrupted.shouldEcho(7));
+    require(!interrupted.end(7));
+    require(interrupted.begin(7));
+    require(interrupted.end(7));
     testStartupDecision();
     testOwnershipAndShm();
     testEditSuppression();
