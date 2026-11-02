@@ -26,6 +26,7 @@ try {
         "$root\native\src\vst3_ipc_host.cpp",
         "$root\native\src\vst3_ipc_platform_win.cpp",
         "$root\test\native\ipc_host_test.cpp",
+        "$root\test\native\ipc_host_recovery_test.cpp",
         '/Fe:ipc_host_test.exe')
     Invoke-Checked "$build\ipc_host_test.exe" @("$build\probe_worker.exe")
 } finally {

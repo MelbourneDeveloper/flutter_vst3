@@ -42,8 +42,8 @@ public:
     /// nothing is lost while the worker is late. Unknown ids are ignored.
     void setParameter(int paramId, double value) noexcept;
 
-    /// Renders any number of samples. Returns false if any part of the output
-    /// is silence because the worker was late or dead.
+    /// Renders any number of samples. Returns false, with all of the output
+    /// silent, if the worker was late or dead for any part of it.
     bool process(const float* inL, const float* inR, float* outL, float* outR, int numSamples) noexcept;
 
     /// True once configure has succeeded and the worker hasn't been seen dead.
@@ -62,6 +62,7 @@ private:
     bool reclaimFromLateWorker() noexcept;
     void flushParameters() noexcept;
     void noteWorkerLate() noexcept;
+    void forgetDeadWorker() noexcept;
     void reclaimForControl();
     void start(double sampleRate, int maxBlockSize);
     void sendControl(uint32_t command);

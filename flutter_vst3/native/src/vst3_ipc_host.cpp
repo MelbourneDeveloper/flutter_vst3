@@ -109,8 +109,7 @@ void Vst3IpcHost::waitForWorker(int timeoutMs) {
     while (std::chrono::steady_clock::now() < deadline) {
         if (semTimedWait(semDone_, 0.01)) return;
         if (!childAlive(child_)) {
-            child_ = 0;
-            dead_ = true;
+            forgetDeadWorker();
             throw std::runtime_error("Dart worker exited: " + workerPath_);
         }
     }
@@ -189,7 +188,11 @@ void Vst3IpcHost::flushParameters() noexcept {
 }
 
 void Vst3IpcHost::noteWorkerLate() noexcept {
-    if (childAlive(child_)) return;
+    if (!childAlive(child_)) forgetDeadWorker();
+}
+
+void Vst3IpcHost::forgetDeadWorker() noexcept {
+    if (child_) childReleaseDead(child_);
     child_ = 0;
     dead_ = true;
 }
@@ -241,5 +244,6 @@ bool Vst3IpcHost::process(const float* inL, const float* inR, float* outL, float
         complete = processChunk(inL + done, inR + done, outL + done, outR + done, chunk) && complete;
         done += chunk;
     }
+    if (!complete) writeSilence(outL, outR, numSamples);
     return complete;
 }

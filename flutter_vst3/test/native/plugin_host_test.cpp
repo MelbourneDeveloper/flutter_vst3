@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstdio>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -16,6 +17,7 @@
 #include "base/source/fobject.h"
 #include "pluginterfaces/vst/ivstaudioprocessor.h"
 #include "pluginterfaces/vst/ivstcomponent.h"
+#include "pluginterfaces/vst/ivsteditcontroller.h"
 #include "public.sdk/source/common/memorystream.h"
 #include "public.sdk/source/vst/hosting/hostclasses.h"
 #include "public.sdk/source/vst/hosting/module.h"
@@ -110,6 +112,7 @@ public:
     }
 
     IComponent* component() { return component_.get(); }
+    IAudioProcessor* processor() { return processor_.get(); }
 
 private:
     IPtr<IComponent> component_;
@@ -230,6 +233,85 @@ void testTruncatedStateIsRejected() {
     check(instance.component()->setState(&stream) != kResultOk, "truncated state must be rejected");
 }
 
+/// Effects with feedback ring on after the input ends, so the host must keep rendering.
+void testTailIsReported() {
+    Instance instance;
+    check(instance.processor()->getTailSamples() == kInfiniteTail, "the echo's tail must not be reported as absent");
+}
+
+std::vector<double> savedValues(IComponent* component) {
+    MemoryStream stream;
+    check(component->getState(&stream) == kResultOk, "getState failed");
+    int64 size = 0;
+    stream.seek(0, IBStream::kIBSeekEnd, &size);
+    stream.seek(0, IBStream::kIBSeekSet, nullptr);
+    std::vector<double> values(static_cast<size_t>(size) / sizeof(double));
+    int32 bytes = 0;
+    stream.read(values.data(), static_cast<int32>(size), &bytes);
+    check(bytes == size && !values.empty(), "state holds whole values");
+    return values;
+}
+
+void loadInto(MemoryStream& stream, const std::vector<double>& values) {
+    stream.write(const_cast<double*>(values.data()), static_cast<int32>(values.size() * sizeof(double)), nullptr);
+    stream.seek(0, IBStream::kIBSeekSet, nullptr);
+}
+
+const std::vector<double>& badValues() {
+    static const std::vector<double> values = {std::numeric_limits<double>::quiet_NaN(),
+        std::numeric_limits<double>::infinity(), -0.5, 1.5};
+    return values;
+}
+
+/// Corrupt state must not reach the DSP, and must leave the instance as it was.
+void testProcessorRejectsInvalidState() {
+    Instance instance;
+    const auto before = savedValues(instance.component());
+    for (double bad : badValues()) {
+        auto values = before;
+        values.back() = bad;
+        MemoryStream stream;
+        loadInto(stream, values);
+        check(instance.component()->setState(&stream) != kResultOk, "invalid value must be rejected");
+        check(savedValues(instance.component()) == before, "a rejected state must change nothing");
+    }
+}
+
+/// The controller reads the same state, and must treat it the same way.
+void testControllerRejectsInvalidState() {
+    Instance instance;
+    TUID cid;
+    check(instance.component()->getControllerClassId(cid) == kResultTrue, "getControllerClassId");
+    auto factory = gModule->getFactory();
+    auto controller = factory.createInstance<IEditController>(VST3::UID::fromTUID(cid));
+    check(controller != nullptr, "create controller");
+    check(controller->initialize(&gHost) == kResultOk, "initialize controller");
+    const auto saved = savedValues(instance.component());
+    for (size_t i = 0; i < saved.size(); ++i) check(controller->setParamNormalized(static_cast<ParamID>(i), 0.75) == kResultOk, "set");
+    const auto unchanged = [&](const std::string& label) {
+        for (size_t i = 0; i < saved.size(); ++i) {
+            check(controller->getParamNormalized(static_cast<ParamID>(i)) == 0.75, label + " changed a parameter");
+        }
+    };
+    for (double bad : badValues()) {
+        auto values = saved;
+        values.back() = bad;
+        MemoryStream stream;
+        loadInto(stream, values);
+        check(controller->setComponentState(&stream) != kResultOk, "invalid value must be rejected");
+        unchanged("an invalid state");
+    }
+    MemoryStream truncated;
+    loadInto(truncated, {0.25});
+    check(controller->setComponentState(&truncated) != kResultOk, "truncated state must be rejected");
+    unchanged("a truncated state");
+    MemoryStream good;
+    loadInto(good, std::vector<double>(saved.size(), 0.25));
+    check(controller->setComponentState(&good) == kResultOk, "valid state accepted");
+    for (size_t i = 0; i < saved.size(); ++i) check(controller->getParamNormalized(static_cast<ParamID>(i)) == 0.25, "valid state applied");
+    controller->terminate();
+}
+
 /// B10: stopping must clear the tail.
 void testDeactivateClearsTail() {
     Instance instance;
@@ -288,6 +370,9 @@ int main(int argc, char** argv) {
         {"B6 saved state reaches the DSP", testSavedStateReachesDsp},
         {"B6 truncated state is rejected", testTruncatedStateIsRejected},
         {"B10 deactivate clears the tail", testDeactivateClearsTail},
+        {"tail is reported", testTailIsReported},
+        {"processor rejects invalid state", testProcessorRejectsInvalidState},
+        {"controller rejects invalid state", testControllerRejectsInvalidState},
     };
     int failures = 0;
     for (const auto& test : tests) {

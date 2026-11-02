@@ -11,6 +11,7 @@ const int _paramExit = 1;
 const int _paramThrow = 2;
 const int _paramProbe = 3;
 const int _paramValue = 4;
+const int _paramStallNextMs = 5;
 
 const int _probeSampleRate = 1;
 const int _probeMaxBlock = 2;
@@ -29,6 +30,7 @@ final class _ProbeProcessor implements Vst3WorkerProcessor {
   int _initializes = 0;
   double _lastValue = -1;
   int _stallMs = 0;
+  int _stallNextMs = 0;
   int _probe = 0;
 
   @override
@@ -51,6 +53,8 @@ final class _ProbeProcessor implements Vst3WorkerProcessor {
         _probe = value.toInt();
       case _paramValue:
         _lastValue = value;
+      case _paramStallNextMs:
+        _stallNextMs = value.toInt();
     }
   }
 
@@ -73,7 +77,8 @@ final class _ProbeProcessor implements Vst3WorkerProcessor {
   ) {
     _blocks++;
     _stallMs > 0 ? sleep(Duration(milliseconds: _stallMs)) : null;
-    _stallMs = 0;
+    _stallMs = _stallNextMs;
+    _stallNextMs = 0;
     final probe = _probeValue;
     for (var i = 0; i < inputL.length; i++) {
       outputL[i] = inputL[i] * 2;

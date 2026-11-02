@@ -152,6 +152,9 @@ void childStop(intptr_t child, int graceMs) noexcept {
     waitpid(static_cast<pid_t>(child), &status, 0);
 }
 
+// childAlive already reaped it.
+void childReleaseDead(intptr_t) noexcept {}
+
 int64_t childPid(intptr_t child) noexcept { return static_cast<int64_t>(child); }
 
 std::string modulePath() {

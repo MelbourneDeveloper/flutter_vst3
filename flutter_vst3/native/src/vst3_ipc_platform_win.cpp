@@ -110,6 +110,8 @@ void childStop(intptr_t child, int graceMs) noexcept {
     CloseHandle(handle);
 }
 
+void childReleaseDead(intptr_t child) noexcept { CloseHandle(reinterpret_cast<HANDLE>(child)); }
+
 int64_t childPid(intptr_t child) noexcept {
     return static_cast<int64_t>(GetProcessId(reinterpret_cast<HANDLE>(child)));
 }

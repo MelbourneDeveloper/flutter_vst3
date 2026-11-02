@@ -15,8 +15,10 @@ using namespace Steinberg::Vst;
 
 #include "embedded_flutter_view.h"
 #include "view_logic.h"
+#include "vst3_plugin_state.h"
 #include "pluginterfaces/vst/ivstmessage.h"
 #include <cstring>
+#include <vector>
 #ifdef _WIN32
 #include <windows.h>
 #else
@@ -92,17 +94,11 @@ public:
     }
 
     tresult PLUGIN_API setComponentState(IBStream* state) override {
-        if (!state) return kResultFalse;
-
-        // Read parameter values from processor state
+        std::vector<double> values;
+        if (!vst3ReadPluginState(state, {{PARAMETER_COUNT}}, values)) return kResultFalse;
         for (int32 i = 0; i < {{PARAMETER_COUNT}}; ++i) {
-            double value = 0.0;
-            int32 bytesRead = 0;
-            if (state->read(&value, sizeof(value), &bytesRead) == kResultTrue) {
-                setParamNormalized(i, value);
-            }
+            setParamNormalized(i, values[static_cast<size_t>(i)]);
         }
-
         return kResultTrue;
     }
 
@@ -113,13 +109,9 @@ public:
     tresult PLUGIN_API getState(IBStream* state) override {
         if (!state) return kResultFalse;
 
-        // Write current parameter values
         for (int32 i = 0; i < {{PARAMETER_COUNT}}; ++i) {
-            double value = getParamNormalized(i);
-            int32 bytesWritten = 0;
-            state->write(&value, sizeof(value), &bytesWritten);
+            if (!vst3WritePluginStateValue(state, getParamNormalized(i))) return kResultFalse;
         }
-
         return kResultTrue;
     }
 

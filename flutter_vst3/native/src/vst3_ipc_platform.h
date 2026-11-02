@@ -45,6 +45,9 @@ bool childAlive(intptr_t child) noexcept;
 /// Waits up to graceMs for the child to exit, then kills it, and releases it.
 void childStop(intptr_t child, int graceMs) noexcept;
 
+/// Releases what's still held for a child that childAlive reported dead.
+void childReleaseDead(intptr_t child) noexcept;
+
 int64_t childPid(intptr_t child) noexcept;
 
 /// Absolute path of the module containing this code.

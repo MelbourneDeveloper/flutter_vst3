@@ -16,6 +16,7 @@ c++ -std=c++17 -O1 -g -Wall -Wextra -Werror \
   "$root/native/src/vst3_ipc_host.cpp" \
   "$root/native/src/vst3_ipc_platform_posix.cpp" \
   "$root/test/native/ipc_host_test.cpp" \
+  "$root/test/native/ipc_host_recovery_test.cpp" \
   "${libs[@]}" -o "$build/ipc_host_test"
 
 "$build/ipc_host_test" "$build/probe_worker"

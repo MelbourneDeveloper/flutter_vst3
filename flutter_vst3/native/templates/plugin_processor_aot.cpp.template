@@ -13,6 +13,7 @@
 #include "pluginterfaces/vst/ivstprocesscontext.h"
 #include "public.sdk/source/vst/vstaudioeffect.h"
 #include "vst3_ipc_host.h"
+#include "vst3_plugin_state.h"
 
 #include <atomic>
 #include <cstdio>
@@ -65,6 +66,7 @@ public:
     tresult PLUGIN_API setState(IBStream* state) override;
     tresult PLUGIN_API getState(IBStream* state) override;
     tresult PLUGIN_API getControllerClassId(TUID classId) override;
+    uint32 PLUGIN_API getTailSamples() override { return kInfiniteTail; }
 
 private:
     void applyParameterChanges(ProcessData& data);
@@ -200,14 +202,8 @@ tresult {{PLUGIN_CLASS_NAME}}Processor::process(ProcessData& data) {
 }
 
 tresult {{PLUGIN_CLASS_NAME}}Processor::setState(IBStream* state) {
-    if (!state) return kResultFalse;
-    std::vector<double> values(static_cast<size_t>(kParameterCount));
-    for (double& value : values) {
-        int32 bytesRead = 0;
-        if (state->read(&value, sizeof(value), &bytesRead) != kResultTrue || bytesRead != sizeof(value)) {
-            return kResultFalse;
-        }
-    }
+    std::vector<double> values;
+    if (!vst3ReadPluginState(state, kParameterCount, values)) return kResultFalse;
     for (int32 i = 0; i < kParameterCount; ++i) {
         parameterValues_[static_cast<size_t>(i)].store(values[static_cast<size_t>(i)]);
     }
@@ -218,11 +214,7 @@ tresult {{PLUGIN_CLASS_NAME}}Processor::setState(IBStream* state) {
 tresult {{PLUGIN_CLASS_NAME}}Processor::getState(IBStream* state) {
     if (!state) return kResultFalse;
     for (auto& parameter : parameterValues_) {
-        double value = parameter.load();
-        int32 bytesWritten = 0;
-        if (state->write(&value, sizeof(value), &bytesWritten) != kResultTrue || bytesWritten != sizeof(value)) {
-            return kResultFalse;
-        }
+        if (!vst3WritePluginStateValue(state, parameter.load())) return kResultFalse;
     }
     return kResultOk;
 }

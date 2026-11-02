@@ -3,91 +3,13 @@
 // Usage: ipc_host_test <path to probe_worker> [--host-then-die <pid file>]
 // Every failure exits non-zero.
 
-#include <chrono>
-#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
-#include <functional>
-#include <stdexcept>
-#include <string>
-#include <thread>
-#include <vector>
 
-#include "vst3_ipc_host.h"
-
-#ifdef _WIN32
-#include <windows.h>
-#else
-#include <signal.h>
-#include <sys/wait.h>
-#include <unistd.h>
-#endif
+#include "ipc_test_support.h"
 
 namespace {
-
-constexpr int kParamStallMs = 0;
-constexpr int kParamExit = 1;
-constexpr int kParamThrow = 2;
-constexpr int kParamProbe = 3;
-constexpr int kParamValue = 4;
-constexpr int kParamCount = 5;
-constexpr int kProbeSampleRate = 1;
-constexpr int kProbeMaxBlock = 2;
-constexpr int kProbeBlocks = 3;
-constexpr int kProbeResets = 4;
-constexpr int kProbeLastValue = 5;
-
-std::string gWorker;
-
-void check(bool condition, const std::string& message) {
-    if (!condition) throw std::runtime_error(message);
-}
-
-void checkNear(double actual, double expected, const std::string& message) {
-    check(std::fabs(actual - expected) < 1e-3,
-          message + ": expected " + std::to_string(expected) + ", got " + std::to_string(actual));
-}
-
-struct Block {
-    std::vector<float> inL, inR, outL, outR;
-    explicit Block(int size, float value = 0.25f) : inL(size, value), inR(size, value), outL(size, 9.f), outR(size, 9.f) {}
-    bool render(Vst3IpcHost& host) {
-        return host.process(inL.data(), inR.data(), outL.data(), outR.data(), static_cast<int>(inL.size()));
-    }
-};
-
-double probe(Vst3IpcHost& host, int which) {
-    host.setParameter(kParamProbe, which);
-    Block block(16);
-    check(block.render(host), "probe block was late");
-    return block.outR[0];
-}
-
-double msSince(std::chrono::steady_clock::time_point start) {
-    return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
-}
-
-bool workerGone(int64_t pid) {
-#ifdef _WIN32
-    HANDLE handle = OpenProcess(SYNCHRONIZE, FALSE, static_cast<DWORD>(pid));
-    if (!handle) return true;
-    const bool gone = WaitForSingleObject(handle, 0) == WAIT_OBJECT_0;
-    CloseHandle(handle);
-    return gone;
-#else
-    return kill(static_cast<pid_t>(pid), 0) != 0;
-#endif
-}
-
-bool waitUntilGone(int64_t pid, int timeoutMs) {
-    const auto start = std::chrono::steady_clock::now();
-    while (msSince(start) < timeoutMs) {
-        if (workerGone(pid)) return true;
-        std::this_thread::sleep_for(std::chrono::milliseconds(20));
-    }
-    return false;
-}
 
 void testRoundTrip() {
     Vst3IpcHost host(gWorker, kParamCount);
@@ -97,85 +19,6 @@ void testRoundTrip() {
     for (float sample : block.outL) checkNear(sample, 0.5, "output is the worker's output");
     checkNear(probe(host, kProbeSampleRate), 48000.0, "worker saw the sample rate");
     checkNear(probe(host, kProbeMaxBlock), 512.0, "worker saw the block size");
-}
-
-/// B1: a late block must not desynchronize any later block.
-void testRecoversAfterLateBlock() {
-    Vst3IpcHost host(gWorker, kParamCount);
-    host.configure(48000.0, 256, false);
-    host.setParameter(kParamStallMs, 200);
-    Block late(256, 0.25f);
-    check(!late.render(host), "stalled block should be reported late");
-    for (float sample : late.outL) checkNear(sample, 0.0, "late block is silent");
-
-    const auto start = std::chrono::steady_clock::now();
-    while (msSince(start) < 2000) {
-        Block next(256, 0.1f);
-        if (next.render(host)) break;
-        for (float sample : next.outL) checkNear(sample, 0.0, "block during the stall is silent");
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
-    }
-    for (int i = 0; i < 50; ++i) {
-        const float value = 0.01f * static_cast<float>(i + 1);
-        Block block(256, value);
-        if (!block.render(host)) continue;  // A slow machine may miss a realtime deadline.
-        checkNear(block.outL[0], value * 2.0, "block returned its own output, not a stale one");
-    }
-}
-
-/// B7: a stalled worker costs one block's budget, and later blocks don't wait.
-void testStallIsBounded() {
-    Vst3IpcHost host(gWorker, kParamCount);
-    host.configure(48000.0, 480, false);
-    host.setParameter(kParamStallMs, 500);
-    Block block(480);
-    const auto start = std::chrono::steady_clock::now();
-    check(!block.render(host), "stalled block should be reported late");
-    const double firstMs = msSince(start);
-    check(firstMs < 40.0, "first late block took " + std::to_string(firstMs) + " ms against a 10 ms budget");
-    const auto second = std::chrono::steady_clock::now();
-    for (int i = 0; i < 100; ++i) block.render(host);
-    const double laterMs = msSince(second);
-    check(laterMs < 50.0, "100 blocks during a stall took " + std::to_string(laterMs) + " ms");
-}
-
-/// B8: a dead worker produces silence without any per-block wait.
-void testDeadWorkerIsBounded() {
-    Vst3IpcHost host(gWorker, kParamCount);
-    host.configure(48000.0, 4096, false);
-    const int64_t pid = host.workerProcessId();
-    host.setParameter(kParamExit, 1.0);
-    Block block(4096);
-    check(!block.render(host), "block from a dying worker should be reported late");
-    check(waitUntilGone(pid, 2000), "worker should have exited");
-    block.render(host);
-    check(!host.isRunning(), "host should notice the dead worker");
-    host.setParameter(kParamExit, 0.0);
-    const auto start = std::chrono::steady_clock::now();
-    for (int i = 0; i < 1000; ++i) {
-        check(!block.render(host), "dead worker block must be reported");
-    }
-    const double elapsed = msSince(start);
-    check(elapsed < 200.0, "1000 blocks with a dead worker took " + std::to_string(elapsed) + " ms");
-    for (float sample : block.outL) checkNear(sample, 0.0, "dead worker output is silent");
-    host.configure(48000.0, 4096, true);
-    check(host.isRunning(), "configure should start a new worker");
-    check(block.render(host), "new worker should render");
-    checkNear(block.outL[0], 0.5, "new worker output");
-}
-
-/// An exception in the DSP is fatal to the worker and visible to the host.
-void testDspExceptionIsDetected() {
-    Vst3IpcHost host(gWorker, kParamCount);
-    host.configure(48000.0, 4096, false);
-    host.setParameter(kParamThrow, 1.0);
-    Block block(4096);
-    const auto start = std::chrono::steady_clock::now();
-    while (host.isRunning() && msSince(start) < 3000) {
-        block.render(host);
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
-    }
-    check(!host.isRunning(), "host should notice a worker killed by a DSP exception");
 }
 
 /// B2: the live worker must see changes to rate and block size.
@@ -255,21 +98,6 @@ void testInstancesAreIsolated() {
     a.dispose();
     check(block.render(b), "b must survive disposing a");
     checkNear(block.outL[0], 0.5, "b output after disposing a");
-}
-
-/// B7: values set while the worker is late are kept, and the latest one wins.
-void testParametersSurviveStall() {
-    Vst3IpcHost host(gWorker, kParamCount);
-    host.configure(48000.0, 256, false);
-    host.setParameter(kParamStallMs, 100);
-    Block block(256);
-    block.render(host);
-    for (int i = 0; i < 1000; ++i) {
-        host.setParameter(kParamValue, i / 1000.0);
-        block.render(host);
-    }
-    host.configure(48000.0, 256, true);
-    checkNear(probe(host, kProbeLastValue), 0.999, "latest value arrives after the stall");
 }
 
 /// B10: reset reaches the DSP.
@@ -365,24 +193,20 @@ int main(int argc, char** argv) {
     if (argc == 4 && std::string(argv[2]) == "--host-then-die") return hostThenDie(argv[3]);
     const std::string self = argv[0];
 
-    const std::vector<std::pair<std::string, std::function<void()>>> tests = {
+    IpcTests tests = {
         {"round trip", testRoundTrip},
-        {"B1 recovers after a late block", testRecoversAfterLateBlock},
         {"B2 reconfigure reaches the worker", testReconfigure},
         {"B3 missing worker fails fast", [] { testStartupFailure(gWorker + ".missing", "missing"); }},
         {"B4 oversized block", testOversizedBlock},
         {"B5 instances are isolated", testInstancesAreIsolated},
-        {"B7 stall is bounded", testStallIsBounded},
-        {"B7 parameters survive a stall", testParametersSurviveStall},
-        {"B8 dead worker is bounded", testDeadWorkerIsBounded},
         {"B8 worker exits when the host dies", [&] { testWorkerExitsWhenHostDies(self); }},
         {"B9 memory stays readable after dispose", testMemoryStaysReadableAfterDispose},
         {"B10 reset reaches the DSP", testReset},
-        {"DSP exception is detected", testDspExceptionIsDetected},
         {"parameters replay to a new worker", testParametersReplayToNewWorker},
         {"dispose stops the worker", testDisposeStopsWorker},
         {"worker does not inherit descriptors", testWorkerDoesNotInheritDescriptors},
     };
+    for (auto& test : recoveryTests()) tests.push_back(std::move(test));
     int failures = 0;
     for (const auto& test : tests) {
         try {
