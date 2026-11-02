@@ -5,6 +5,7 @@ public:
     std::function<void()> onFailure;
     UINT_PTR watchdog{0};
     static inline bool sUiAlive{false};
+    static constexpr UINT_PTR kHeldButtonTimer = 1;
     static inline bool sEngineFailed{false};
     static inline WinFlutterHost* sOwner{nullptr};
     HWND flutterHwnd{nullptr};
@@ -171,6 +172,7 @@ public:
         ShowWindow(sSharedFlutterHwnd, SW_SHOW);
         UpdateWindow(sSharedFlutterHwnd);
         FlutterDesktopViewControllerForceRedraw(sSharedVc);
+        ignoreHeldButton();
 
         // Notify Flutter UI and synchronize parameters (mirroring Linux)
         if (sSharedChannel) {
@@ -203,6 +205,22 @@ public:
         if (onFailure) onFailure();
     }
 
+    static bool leftButtonHeld() { return (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0; }
+
+    static VOID CALLBACK enableWhenReleased(HWND window, UINT, UINT_PTR timer, DWORD) {
+        if (leftButtonHeld()) return;
+        KillTimer(window, timer);
+        EnableWindow(window, TRUE);
+    }
+
+    /// A button held since before this window appeared isn't a click on it. If
+    /// Flutter saw only the end of one, its next drag would never finish.
+    static void ignoreHeldButton() {
+        if (!leftButtonHeld()) return;
+        EnableWindow(sSharedFlutterHwnd, FALSE);
+        SetTimer(sSharedFlutterHwnd, kHeldButtonTimer, 20, enableWhenReleased);
+    }
+
     /// Ends Flutter's drag before its window hides, so the drag can't depend on a
     /// button release that may never reach that window.
     static void releasePointer() {
@@ -228,6 +246,8 @@ public:
 
         if (sSharedFlutterHwnd) {
             releasePointer();
+            KillTimer(sSharedFlutterHwnd, kHeldButtonTimer);
+            EnableWindow(sSharedFlutterHwnd, TRUE);
             ShowWindow(sSharedFlutterHwnd, SW_HIDE);
             SetParent(sSharedFlutterHwnd, getHolderHwnd());
         }
