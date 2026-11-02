@@ -109,6 +109,7 @@ void main() {
     await tester.pump(const Duration(seconds: 2));
     expect(fetches(), 1);
     memory.cast<Uint32>().value = 0;
+    address = 0;
     await tester.pump(const Duration(milliseconds: 40));
     await tester.pump();
     expect(fetches(), 2);
@@ -118,6 +119,47 @@ void main() {
     await host('onHostAttached');
     await tester.pump();
     expect(fetches(), 3);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('the editor says when the DSP stops, and when it is back',
+      (tester) async {
+    const message = 'DSP stopped. Audio is silent until the plugin is re-enabled.';
+    final memory = allocateSharedMemoryFixture();
+    final restarted = allocateSharedMemoryFixture();
+    addTearDown(() {
+      freeSharedMemoryFixture(memory);
+      freeSharedMemoryFixture(restarted);
+    });
+    memory.cast<Uint32>().value = vst3ShmMagic;
+    restarted.cast<Uint32>().value = vst3ShmMagic;
+    address = memory.address;
+    await host('onHostDetached');
+    await host('onHostAttached');
+    await tester.pumpWidget(const MaterialApp(home: EchoUI()));
+    await tester.pump();
+    expect(find.text(message), findsNothing);
+    int fetches() =>
+        calls.where((c) => c.method == 'getSharedMemoryInfo').length;
+
+    memory.cast<Uint32>().value = 0;
+    await tester.pump(const Duration(milliseconds: 40));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text(message), findsOneWidget);
+
+    final before = fetches();
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump();
+    expect(fetches() - before, inInclusiveRange(1, 3),
+        reason: 'looks for a new worker about once a second, not every frame');
+    expect(find.text(message), findsOneWidget);
+
+    address = restarted.address;
+    await tester.pump(const Duration(milliseconds: 1100));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text(message), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
 

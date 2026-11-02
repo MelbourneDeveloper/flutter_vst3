@@ -227,6 +227,7 @@ The first review missed these. Each has a test unless it says otherwise.
 | F4 | `dart_vst_host` let its `PlugProvider` go out of scope, which terminated the plugin it had loaded | The state owns the provider |
 | F5 | Flutter's Linux platform handler calls `exit(0)` on a plug delete event, which would exit the DAW. A close race also gave `BadWindow` | The plug swallows the delete event. The editor test exited early before this, which its completion marker catches |
 | F6 | The worker inherited the host's file descriptors | `worker does not inherit descriptors` |
+| F8 | A worker crash during playback was silent for the user: audio just stopped. The host now clears the block's magic word, and the Flutter editor shows "DSP stopped" until a new worker starts | `the editor says when the DSP stops, and when it is back`, `a block with a cleared magic word means the worker died`, `B8 dead worker is bounded` |
 | F7 | The plugin's RUNPATH held an absolute path from the build machine. Found by the H19 test | Only `$ORIGIN` now |
 
 ### Second adversarial review
@@ -299,8 +300,27 @@ CI run `41385874459` at `b8857d1`: all 23 jobs green.
 - **H5 relies on one Windows session's behaviour.** The test detaches from its console so that a wrong flag would open a window. It failed under mutation on a local Windows machine. CI's runs have only shown it pass.
 - **H7's address inside the controller can't be observed from a host.** The test checks the message and its forwarding.
 - **H10 on native sliders** is tested through real pointer drags on Linux and Windows, but not on Cocoa.
+- **"DSP stopped" isn't tested end to end.** The IPC test proves the host clears the magic word, and the widget test proves the editor reacts to it, on the same memory layout. No test kills a real worker under an open editor.
 - **Module unload with a live engine** is only exercised by the test process exiting.
 - **Audio-thread timing** was measured on CI and WSL, not under real load. An offline render waits up to 30 seconds for a worker that hangs.
+
+### Assumptions behind the choices
+
+Made without asking, on the owner's instruction to use judgment. Each can be reversed.
+
+| Choice | Assumption | If it's wrong |
+|---|---|---|
+| Echo keeps its original UIDs, pinned in metadata | Echo is the plugin people have saved projects with | Delete `processorUid` and `controllerUid` from `vsts/echo/plugin_metadata.json` |
+| Reverb gets a new UID, not Echo's | The two can't share a UID in one host, and Reverb had no working editor on `main`, so few projects use it | Pin a different pair in Reverb's metadata. They can't both have the old pair |
+| A failure reports an error through the VST3 API, not `abort()` | "Fail hard" means visibly, not by taking down the user's DAW and unsaved work | Put `abort()` back in `setActive` |
+| A dead worker restarts at the next activation, not by itself | Starting a process from the audio thread isn't acceptable, and a restart thread isn't worth its cost | Add a restart thread in `Vst3IpcHost` |
+| "DSP stopped" shows in the Flutter editor only | Most users see that editor. **The native slider fallback, which Reverb always uses, shows no message** | Add it to each native UI |
+| The editor checks for a new worker about once a second | A one-second delay in clearing the message doesn't matter | Change `_restartCheckTicks` |
+| A saved state with a bad value is rejected whole | Clamping would silently change a user's project | Clamp in `vst3ReadPluginState` |
+| No PR to `main` opened | The owner said not to open PRs, and hasn't changed that. **Nothing can merge until one exists** | Open one from this branch |
+| Light agentpmo means agent files and Makefile targets | "Light" rules out the rest of the standard: coverage thresholds, Dependabot, CodeQL, a release workflow, Deslop, the shipwright check and repo settings. None was applied, and `make test` doesn't enforce coverage | Run the `agent-pmo` skill for the full conversion |
+| `CLAUDE.md` stays canonical, with `AGENTS.md` a pointer | The spec keeps a substantial existing `CLAUDE.md` as canonical. `GEMINI.md` was already a symlink to it | Swap the two |
+| CI runs on pushes to `feature/**` as well as on PRs | The owner wanted proof on this branch before any PR exists | Remove the trigger before merging, as the standard is PR-only |
 
 ### Decisions
 

@@ -54,12 +54,15 @@ void testDeadWorkerIsBounded() {
     Vst3IpcHost host(gWorker, kParamCount);
     host.configure(48000.0, 4096, false);
     const int64_t pid = host.workerProcessId();
+    Vst3SharedMemory* oldBlock = host.memory();
+    check(oldBlock->magic == VST3_SHM_MAGIC, "a running worker's block is valid");
     host.setParameter(kParamExit, 1.0);
     Block block(4096);
     check(!block.render(host), "block from a dying worker should be reported late");
     check(waitUntilGone(pid, 2000), "worker should have exited");
     block.render(host);
     check(!host.isRunning(), "host should notice the dead worker");
+    check(oldBlock->magic == 0, "a dead worker's block must read as invalid, so the editor can say so");
     host.setParameter(kParamExit, 0.0);
     const auto start = std::chrono::steady_clock::now();
     for (int i = 0; i < 1000; ++i) {
@@ -70,6 +73,7 @@ void testDeadWorkerIsBounded() {
     for (float sample : block.outL) checkNear(sample, 0.0, "dead worker output is silent");
     host.configure(48000.0, 4096, true);
     check(host.isRunning(), "configure should start a new worker");
+    check(host.memory()->magic == VST3_SHM_MAGIC, "a new worker's block is valid");
     check(block.render(host), "new worker should render");
     checkNear(block.outL[0], 0.5, "new worker output");
 }

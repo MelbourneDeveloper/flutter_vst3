@@ -1,10 +1,11 @@
+# agent-pmo:372ce7f
 # Flutter VST3 toolkit: run from the repository root.
 .DEFAULT_GOAL := reverb
 .SHELLFLAGS := -ec
 VST3_SDK_DIR ?= $(CURDIR)/vst3sdk
 export VST3_SDK_DIR
 FLUTTER_BUILD_MODE ?= release
-.PHONY: all build native plugin test test-native test-host test-graph dart-deps reverb-deps echo-deps flutter-deps reverb reverb-vst reverb-build-only echo echo-vst echo-build-only echo-flutter install clean clean-native clean-plugin check-env help
+.PHONY: all lint fmt ci setup build native plugin test test-native test-host test-graph dart-deps reverb-deps echo-deps flutter-deps reverb reverb-vst reverb-build-only echo echo-vst echo-build-only echo-flutter install clean clean-native clean-plugin check-env help
 
 all: reverb
 build: native dart-deps plugin
@@ -44,6 +45,17 @@ echo echo-vst echo-build-only: echo-flutter
 	cmake --build vsts/echo/build --parallel
 plugin: reverb echo
 
+lint: dart-deps
+	cd dart_vst_host && dart analyze
+	cd dart_vst_graph && dart analyze
+	cd flutter_vst3 && flutter analyze
+	cd vsts/flutter_reverb && flutter analyze
+	cd vsts/echo && flutter analyze
+fmt:
+	dart format dart_vst_host/lib dart_vst_host/test dart_vst_graph/lib dart_vst_graph/test flutter_vst3/lib flutter_vst3/test vsts/echo/lib vsts/echo/test vsts/flutter_reverb/lib vsts/flutter_reverb/test
+ci: lint test build
+setup:
+	./setup.sh
 test: native dart-deps test-native
 	cd dart_vst_host && dart test
 	cd dart_vst_graph && dart test
@@ -73,5 +85,5 @@ check-env:
 	command -v dart
 	command -v flutter
 help:
-	@echo 'Targets: native, dart-deps, reverb, echo, plugin, test, test-native, test-host, test-graph, install, clean'
+	@echo 'Targets: lint, fmt, ci, setup, native, dart-deps, reverb, echo, plugin, test, test-native, test-host, test-graph, install, clean'
 	@echo 'Set VST3_SDK_DIR to the Steinberg SDK root. Flutter is required for plugin packages.'

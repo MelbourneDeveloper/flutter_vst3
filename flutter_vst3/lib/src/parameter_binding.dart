@@ -33,6 +33,17 @@ class VST3ParameterBinding {
   }
 
   bool _isHostAttached = true;
+  bool _dspStopped = false;
+
+  /// Whether the DSP worker died: the host still names a memory block, but the
+  /// block no longer reads as valid. Audio is silent until the next activation.
+  bool get dspStopped => _dspStopped;
+
+  void _setDspStopped(bool stopped) {
+    final changed = stopped != _dspStopped;
+    _dspStopped = stopped;
+    changed ? notifyListeners() : null;
+  }
 
   /// Whether the plugin GUI is currently attached to an active OS window.
   bool get isHostAttached => _isHostAttached;
@@ -224,6 +235,7 @@ class VST3ParameterBinding {
       if (info != null) {
         final addr = (info['address'] as num?)?.toInt() ?? 0;
         _audioReader = Vst3AudioBufferReader.fromAddress(addr);
+        _setDspStopped(addr != 0 && _audioReader == null);
       }
     } on MissingPluginException {
       // Standalone Flutter has no host channel.

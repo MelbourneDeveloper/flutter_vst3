@@ -236,6 +236,7 @@ jobs:
       - run: python3 flutter_vst3/test/native/repo_rules_test.py
       - run: python3 flutter_vst3/test/native/build_rules_versions_test.py
       - run: make native dart-deps
+      - run: make lint
       - run: python3 flutter_vst3/test/native/build_rules_make_test.py
       - run: python3 flutter_vst3/test/native/build_rules_flutter_test.py
       - run: python3 flutter_vst3/test/native/docs_commands_test.py

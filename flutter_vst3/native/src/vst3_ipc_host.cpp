@@ -195,6 +195,8 @@ void Vst3IpcHost::forgetDeadWorker() noexcept {
     if (child_) childReleaseDead(child_);
     child_ = 0;
     dead_ = true;
+    // The editor reads this block, and this is how it learns the DSP has stopped.
+    if (memory_) memory_->magic = 0;
 }
 
 /// Returns true if the block belongs to the host again. A late worker's output

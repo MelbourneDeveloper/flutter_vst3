@@ -100,5 +100,18 @@ class RemovedDesignTests(unittest.TestCase):
                 self.assertNotIn('/workspace', path.read_text(), str(path))
 
 
+class AgentSetup(unittest.TestCase):
+    def test_standard_make_targets_exist(self):
+        for target in ('lint', 'fmt', 'ci', 'setup', 'test', 'build', 'clean'):
+            result = subprocess.run(['make', '-n', target], cwd=ROOT, stdout=subprocess.PIPE,
+                                    stderr=subprocess.STDOUT, text=True)
+            self.assertEqual(0, result.returncode, target + ': ' + result.stdout)
+            self.assertTrue(result.stdout.strip(), target + ' does nothing')
+
+    def test_agent_files_point_at_one_canonical_file(self):
+        self.assertIn('CLAUDE.md', (ROOT / 'AGENTS.md').read_text())
+        self.assertLess(len((ROOT / 'AGENTS.md').read_text().splitlines()), 10, 'AGENTS.md is a pointer')
+
+
 if __name__ == '__main__':
     unittest.main()

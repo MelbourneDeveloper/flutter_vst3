@@ -122,6 +122,19 @@ class _EchoUIState extends State<EchoUI> {
                         ),
                         const Divider(height: 32),
                         _buildBypassToggle(),
+                        ..._binding.dspStopped
+                            ? [
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 12),
+                                  child: Text(
+                                    'DSP stopped. Audio is silent until the plugin is re-enabled.',
+                                    style: TextStyle(
+                                      color: Theme.of(context).colorScheme.error,
+                                    ),
+                                  ),
+                                ),
+                              ]
+                            : const <Widget>[],
                         const SizedBox(height: 24),
                       ],
                     ),
@@ -158,6 +171,8 @@ class _EchoWaveformVisualizerState extends State<EchoWaveformVisualizer> {
   List<double> _samples = const [];
   bool _fetchingReader = false;
   bool _attached = true;
+  int _ticksWithoutReader = 0;
+  static const int _restartCheckTicks = 30;
 
   @override
   void initState() {
@@ -199,10 +214,21 @@ class _EchoWaveformVisualizerState extends State<EchoWaveformVisualizer> {
     }
   }
 
+  /// A stopped DSP restarts at the next activation, with a new memory block.
+  void _lookForRestartedWorker() {
+    _ticksWithoutReader = _ticksWithoutReader + 1;
+    final due = _ticksWithoutReader >= _restartCheckTicks;
+    due ? _ticksWithoutReader = 0 : null;
+    due && VST3ParameterBinding.getInstance().dspStopped ? _initReader() : null;
+  }
+
   void _pollWaveform() {
     if (!VST3ParameterBinding.getInstance().isHostAttached) return;
     final reader = _reader;
-    if (reader == null) return;
+    if (reader == null) {
+      _lookForRestartedWorker();
+      return;
+    }
     if (!reader.isValid || !mounted) {
       _reader = null;
       _initReader();
