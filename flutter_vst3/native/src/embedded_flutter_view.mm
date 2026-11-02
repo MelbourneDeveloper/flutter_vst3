@@ -61,6 +61,17 @@ static BOOL loadFlutterFrameworks(NSString* bundlePath, NSBundle** outFlutter, N
     return YES;
 }
 
+/// The engine crashes the host when the app library is corrupt, so try it first.
+static BOOL appLibraryLoads(NSBundle* appBundle) {
+    void* handle = dlopen(appBundle.executablePath.fileSystemRepresentation, RTLD_LAZY | RTLD_LOCAL);
+    if (!handle) {
+        NSLog(@"[flutter_vst3] Flutter app library failed to load: %s", dlerror());
+        return NO;
+    }
+    dlclose(handle);
+    return YES;
+}
+
 /// Native macOS IPlugView embedding Flutter or falling back to Cocoa sliders.
 class EmbeddedFlutterView : public Steinberg::IPlugView,
                             public Steinberg::FObject,
@@ -216,6 +227,7 @@ private:
     BOOL tryMountFlutter(NSView* parent) {
         NSBundle *flBundle = nil, *appBundle = nil;
         if (!loadFlutterFrameworks(findPluginBundlePath(), &flBundle, &appBundle)) return NO;
+        if (!appLibraryLoads(appBundle)) return NO;
         Class projCls = NSClassFromString(@"FlutterDartProject");
         Class vcCls = NSClassFromString(@"FlutterViewController");
         if (!projCls || !vcCls) return NO;
