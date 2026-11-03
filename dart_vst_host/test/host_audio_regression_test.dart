@@ -10,7 +10,7 @@ void main() {
     final host = VstHost.create(sampleRate: 48000, maxBlock: 512,
         dylibPath: File(_library()).absolute.path);
     addTearDown(host.dispose);
-    final plugin = host.load(pluginFixture());
+    final plugin = host.load(pluginFixture('audio'));
     addTearDown(plugin.unload);
     expect(plugin.setParamNormalized(100, 0), isTrue);
     expect(plugin.resume(sampleRate: 48000, maxBlock: 512), isTrue);

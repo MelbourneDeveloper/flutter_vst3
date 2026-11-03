@@ -25,7 +25,7 @@ void main() {
   });
 
   test('loads a real plugin and processes stereo audio', () {
-    final path = pluginFixture();
+    final path = pluginFixture('host');
     final host = _host();
     addTearDown(host.dispose);
     final plugin = host.load(path);
@@ -38,7 +38,7 @@ void main() {
   test('real SDK plugin exposes controller parameters', () {
     final host = _host();
     addTearDown(host.dispose);
-    final plugin = host.load(pluginFixture());
+    final plugin = host.load(pluginFixture('host'));
     addTearDown(plugin.unload);
     expect(plugin.paramCount(), greaterThan(0));
   }, timeout: const Timeout(Duration(minutes: 10)));

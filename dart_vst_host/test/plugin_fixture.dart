@@ -1,14 +1,16 @@
 import 'dart:io';
 
 /// Finds an explicit plugin or builds the SDK's real ADelay plugin for hosting.
-String pluginFixture() =>
-    Platform.environment['VST3_TEST_PLUGIN'] ?? _buildSdkPlugin();
+///
+/// Test files run in parallel, so each passes its own [name] for a build folder.
+String pluginFixture(String name) =>
+    Platform.environment['VST3_TEST_PLUGIN'] ?? _buildSdkPlugin(name);
 
-String _buildSdkPlugin() {
+String _buildSdkPlugin(String name) {
   final sdk = Platform.environment['VST3_SDK_DIR'] ??
       (throw StateError(
           'Set VST3_SDK_DIR to build ADelay, or VST3_TEST_PLUGIN'));
-  final build = Directory('build/test-sdk').absolute.path;
+  final build = Directory('build/test-sdk/$name').absolute.path;
   _run([
     '-S',
     sdk,
