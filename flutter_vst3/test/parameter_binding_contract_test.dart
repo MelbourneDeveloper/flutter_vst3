@@ -107,6 +107,29 @@ void main() {
       {'id': 1}, {'id': 1, 'value': 0.4}, {'id': 1, 'value': 0.5}, {'id': 1}
     ]);
   });
+  test('no message overtakes the value that opens a gesture '
+      '[PARAM-GESTURE-VALUE-OPENS] [PARAM-GESTURE-END]', () async {
+    _initial = const <Object?, Object?>{'0': 0.25, '2': 0.5};
+    final binding = await _setup();
+    _calls.clear();
+    await binding.beginEdit(1);
+    final first = binding.setParameter(1, 0.4);
+    final second = binding.setParameter(1, 0.5);
+    await first;
+    await second;
+    expect(_calls.map((c) => c.method).toList(),
+        ['beginEdit', 'setParameter', 'setParameter']);
+    expect(_calls[1].arguments, {'id': 1, 'value': 0.4});
+    expect(_calls[2].arguments, {'id': 1, 'value': 0.5});
+    _calls.clear();
+    await binding.beginEdit(1);
+    final dragValue = binding.setParameter(1, 0.2);
+    final release = binding.endEdit(1);
+    await dragValue;
+    await release;
+    expect(_calls.map((c) => c.method).toList(),
+        ['beginEdit', 'setParameter', 'endEdit']);
+  });
   test('closing the editor forgets a gesture that has not started', () async {
     _initial = const <Object?, Object?>{'0': 0.25, '2': 0.5};
     final binding = await _setup();

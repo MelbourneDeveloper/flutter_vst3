@@ -16,6 +16,36 @@ void main() {
     });
   });
 
+  testWidgets('every drag delta lands even without a rebuild between '
+      'updates [PARAM-GESTURE-VALUE-OPENS]', (tester) async {
+    final values = <double>[];
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Center(
+          child: RotaryKnob(
+            label: 'Mix',
+            value: 0.5,
+            display: '50',
+            onChanged: values.add,
+            onChangeStart: () {},
+            onChangeEnd: () {},
+          ),
+        ),
+      ),
+    ));
+    final gesture =
+        await tester.startGesture(tester.getCenter(find.text('50')));
+    await gesture.moveBy(const Offset(0, -12));
+    await gesture.moveBy(const Offset(0, -12));
+    await gesture.moveBy(const Offset(0, -12));
+    await tester.pump();
+    await gesture.up();
+    await tester.pump();
+    expect(values.length, 3);
+    expect(values[0], closeTo(0.6, 1e-12));
+    expect(values[1], closeTo(0.7, 1e-12));
+    expect(values[2], closeTo(0.8, 1e-12));
+  });
   testWidgets('a drag fires one start, updates, then one end', (tester) async {
     final events = <String>[];
     final values = <double>[];

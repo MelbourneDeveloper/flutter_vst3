@@ -16,7 +16,7 @@ double knobValueAfterDrag(double value, double deltaY) =>
 ///
 /// [onChangeStart] and [onChangeEnd] bracket a drag so that callers can map it
 /// to a single VST3 beginEdit/performEdit/endEdit automation gesture.
-class RotaryKnob extends StatelessWidget {
+class RotaryKnob extends StatefulWidget {
   /// Creates a knob showing [value] with [display] as the centre readout.
   const RotaryKnob({
     super.key,
@@ -55,22 +55,50 @@ class RotaryKnob extends StatelessWidget {
   final double size;
 
   @override
+  State<RotaryKnob> createState() => _RotaryKnobState();
+}
+
+/// Accumulates drag deltas from the gesture start, so updates arriving before
+/// a rebuild still move the value by their full distance.
+class _RotaryKnobState extends State<RotaryKnob> {
+  double? _dragValue;
+
+  void _startDrag() {
+    _dragValue = widget.value;
+    widget.onChangeStart();
+  }
+
+  void _updateDrag(DragUpdateDetails details) {
+    final value =
+        knobValueAfterDrag(_dragValue ?? widget.value, details.delta.dy);
+    _dragValue = value;
+    widget.onChanged(value);
+  }
+
+  void _endDrag() {
+    _dragValue = null;
+    widget.onChangeEnd();
+  }
+
+  @override
   Widget build(BuildContext context) => Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(label, style: Theme.of(context).textTheme.titleMedium),
+          Text(widget.label, style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
           GestureDetector(
-            onPanStart: (_) => onChangeStart(),
-            onPanUpdate: (d) => onChanged(knobValueAfterDrag(value, d.delta.dy)),
-            onPanEnd: (_) => onChangeEnd(),
-            onPanCancel: onChangeEnd,
+            onPanStart: (_) => _startDrag(),
+            onPanUpdate: _updateDrag,
+            onPanEnd: (_) => _endDrag(),
+            onPanCancel: _endDrag,
             child: CustomPaint(
-              size: Size.square(size),
-              painter: _KnobPainter(value: value, color: color),
+              size: Size.square(widget.size),
+              painter: _KnobPainter(value: widget.value, color: widget.color),
               child: SizedBox.square(
-                dimension: size,
-                child: Center(child: Text(display, style: TextStyle(color: color))),
+                dimension: widget.size,
+                child: Center(
+                    child: Text(widget.display,
+                        style: TextStyle(color: widget.color))),
               ),
             ),
           ),

@@ -247,7 +247,7 @@ Echo's editor MUST show the text "DSP stopped. Audio is silent until the plugin 
 Code: vsts/echo/lib/ui/echo_ui.dart:125 · Test: vsts/echo/test/ui_regression_test.dart
 
 ### [TELEMETRY-RESTART-POLL]
-The waveform visualiser MUST poll every 33 ms and MUST do nothing while the host is detached. An invalid reader MUST be dropped and refetched immediately; a missing reader MUST trigger a refetch only when `dspStopped` is set, at most once per 30 ticks.
+The waveform visualiser MUST poll every 33 ms and MUST do nothing while the host is detached. An invalid reader MUST be dropped and refetched immediately; a missing reader MUST trigger a refetch at most once per 30 ticks, whether or not `dspStopped` is set, because the plugin may be activated after the editor opens.
 Code: vsts/echo/lib/ui/echo_ui.dart:181; vsts/echo/lib/ui/echo_ui.dart:219 · Test: vsts/echo/test/ui_regression_test.dart
 
 ### [TELEMETRY-DETACH]

@@ -92,7 +92,7 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('waveform fetch is attachment-driven, not timer or parameters',
+  testWidgets('a valid reader fetches only on attachment, a missing one on the bounded tick',
       (tester) async {
     final memory = allocateSharedMemoryFixture();
     addTearDown(() => freeSharedMemoryFixture(memory));
@@ -114,14 +114,52 @@ void main() {
     await tester.pump();
     expect(fetches(), 2);
     await tester.pump(const Duration(seconds: 2));
-    expect(fetches(), 2);
+    expect(fetches(), 4,
+        reason: 'a missing reader retries about once a second, bounded');
     await host('onHostDetached');
     await host('onHostAttached');
     await tester.pump();
-    expect(fetches(), 3);
+    expect(fetches(), 5);
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets('an editor opened while inactive picks the wave up at '
+      'activation [TELEMETRY-RESTART-POLL] [TELEMETRY-SHM-INFO]', (tester) async {
+    final memory = allocateSharedMemoryFixture();
+    addTearDown(() => freeSharedMemoryFixture(memory));
+    address = 0;
+    await host('onHostDetached');
+    await host('onHostAttached');
+    await tester.pumpWidget(const MaterialApp(home: EchoWaveformVisualizer()));
+    await tester.pump();
+    int fetches() =>
+        calls.where((c) => c.method == 'getSharedMemoryInfo').length;
+    CustomPaint scope() => find
+        .descendant(
+            of: find.byType(EchoWaveformVisualizer),
+            matching: find.byType(CustomPaint))
+        .evaluate()
+        .single
+        .widget as CustomPaint;
+    expect(fetches(), 1);
+    final flatPainter = scope().painter;
+
+    memory.cast<Uint32>().value = vst3ShmMagic;
+    Pointer<Int32>.fromAddress(memory.address + vst3OffsetNumSamples).value = 4;
+    Pointer<Float>.fromAddress(memory.address + vst3OffsetOutputL)
+      ..[0] = 0.5
+      ..[1] = -0.5
+      ..[2] = 0.5
+      ..[3] = -0.5;
+    address = memory.address;
+    await tester.pump(const Duration(milliseconds: 1100));
+    await tester.pump();
+    expect(fetches(), 2,
+        reason: 'the missing reader is retried on the bounded tick');
+    expect(identical(scope().painter, flatPainter), isFalse,
+        reason: 'the scope repaints with the block\'s samples');
+    await tester.pumpWidget(const SizedBox());
+  });
   testWidgets('the editor says when the DSP stops, and when it is back',
       (tester) async {
     const message = 'DSP stopped. Audio is silent until the plugin is re-enabled.';

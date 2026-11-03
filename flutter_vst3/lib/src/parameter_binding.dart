@@ -11,7 +11,6 @@ class VST3ParameterBinding {
       MethodChannel('flutter_vst3/parameters');
   static VST3ParameterBinding? _instance;
   final List<void Function()> _listeners = [];
-  final List<void Function(List<double>)> _waveformListeners = [];
 
   final Map<int, double> _parameters = {};
   final Map<int, String> _parameterNames = {};
@@ -53,8 +52,6 @@ class VST3ParameterBinding {
       switch (call.method) {
         case 'onParameterChanged':
           _handleParamChanged(call.arguments);
-        case 'onAudioWaveform':
-          _handleWaveform(call.arguments);
         case 'onHostDetached':
           _isHostAttached = false;
           _audioReader = null;
@@ -127,16 +124,6 @@ class VST3ParameterBinding {
     _ => throw ArgumentError.value(value, 'value', 'Expected normalized value'),
   };
 
-  void _handleWaveform(dynamic arguments) {
-    final list = arguments as List<dynamic>?;
-    if (list != null) {
-      final samples = list.map((e) => (e as num).toDouble()).toList();
-      for (final listener in _waveformListeners) {
-        listener(samples);
-      }
-    }
-  }
-
   /// Adds a listener for parameter updates.
   void addListener(void Function() listener) {
     _listeners.add(listener);
@@ -145,16 +132,6 @@ class VST3ParameterBinding {
   /// Removes a listener.
   void removeListener(void Function() listener) {
     _listeners.remove(listener);
-  }
-
-  /// Adds a listener for real-time waveform frames.
-  void addWaveformListener(void Function(List<double>) listener) {
-    _waveformListeners.add(listener);
-  }
-
-  /// Removes a waveform listener.
-  void removeWaveformListener(void Function(List<double>) listener) {
-    _waveformListeners.remove(listener);
   }
 
   /// Notifies all registered listeners of parameter changes.
@@ -190,11 +167,19 @@ class VST3ParameterBinding {
   }
 
   /// Sets parameter value from UI and notifies the VST3 EditController.
+  ///
+  /// The beginEdit and the value both leave for the host before the first
+  /// await, so a value or endEdit issued in the meantime cannot overtake them.
   Future<void> setParameter(int id, double value) async {
     final clamped = value.clamp(0.0, 1.0);
     _parameters[id] = clamped;
-    _pendingBegins.remove(id) ? await _send('beginEdit', {'id': id}) : null;
-    await _send('setParameter', {'id': id, 'value': clamped});
+    final sends = [
+      ..._pendingBegins.remove(id)
+          ? [_send('beginEdit', {'id': id})]
+          : <Future<void>>[],
+      _send('setParameter', {'id': id, 'value': clamped}),
+    ];
+    await Future.wait(sends);
     notifyListeners();
   }
 

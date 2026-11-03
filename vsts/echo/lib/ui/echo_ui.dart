@@ -214,19 +214,20 @@ class _EchoWaveformVisualizerState extends State<EchoWaveformVisualizer> {
     }
   }
 
-  /// A stopped DSP restarts at the next activation, with a new memory block.
-  void _lookForRestartedWorker() {
+  /// A missing reader is retried on a bounded tick: the worker may have
+  /// restarted into a new block, or the plugin may have been activated.
+  void _retryMissingReader() {
     _ticksWithoutReader = _ticksWithoutReader + 1;
     final due = _ticksWithoutReader >= _restartCheckTicks;
     due ? _ticksWithoutReader = 0 : null;
-    due && VST3ParameterBinding.getInstance().dspStopped ? _initReader() : null;
+    due ? _initReader() : null;
   }
 
   void _pollWaveform() {
     if (!VST3ParameterBinding.getInstance().isHostAttached) return;
     final reader = _reader;
     if (reader == null) {
-      _lookForRestartedWorker();
+      _retryMissingReader();
       return;
     }
     if (!reader.isValid || !mounted) {
