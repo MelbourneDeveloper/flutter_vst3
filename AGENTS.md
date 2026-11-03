@@ -40,6 +40,6 @@ Steinberg VST® 3 toolkit for Dart and Flutter: build plugins and hosts with no 
 - **`flutter_vst3/`** — the plugin framework. `native/cmake/VST3Bridge.cmake` provides `add_dart_vst3_plugin`, which generates all C++ from `native/templates/` and a Dart parameter file. New plugin: [`flutter_vst3/create_plugin_guide.md`](flutter_vst3/create_plugin_guide.md).
 - **`vsts/`** — self-contained plugins, each building its own `.vst3`: `flutter_reverb`, `echo`. Echo's editor is the interactive test UI: `cd vsts/echo && flutter run`.
 - **`dart_vst_host/`, `dart_vst_graph/`** — Dart FFI over C++ in each package's `native/`. C APIs: `native/include/dart_vst_host.h`, `native/include/dvh_graph.h`. The graph connects plugin, mixer, splitter and gain nodes.
-- **Plugin process model** — read [`FLUTTER_UI_SPEC.md`](FLUTTER_UI_SPEC.md) before touching it. The VST3 module and Flutter editor run in the host; DSP runs in one worker process per instance, over shared memory.
+- **Plugin process model** — read [`docs/FLUTTER_UI_SPEC.md`](docs/FLUTTER_UI_SPEC.md) before touching it. The VST3 module and Flutter editor run in the host; DSP runs in one worker process per instance, over shared memory.
 - **Setup:** `make setup` fetches the SDK; `VST3_SDK_DIR` overrides the default `vst3sdk/`. Needs CMake 3.20+, C++17, Dart, Flutter.
 - **Linux:** editors embed through X11 only: `GDK_BACKEND=x11 flutter run`. ❌ Wayland.

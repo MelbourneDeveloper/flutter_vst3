@@ -64,7 +64,7 @@ class RemovedDesignTests(unittest.TestCase):
                 self.assertNotRegex(text(name), r'/Users/|/home/[^$\s/]+/|[A-Za-z]:[\\\\/]Users[\\\\/]')
 
     def test_M13_no_same_isolate_requirement(self):
-        self.assertNotRegex(text('FLUTTER_UI_SPEC.md'), r'(?i)non.negotiable')
+        self.assertNotRegex(text('docs/FLUTTER_UI_SPEC.md'), r'(?i)non.negotiable')
 
     def test_M12_echo_readme_not_template(self):
         self.assertNotIn('A new Flutter project.', text('vsts/echo/README.md'))
