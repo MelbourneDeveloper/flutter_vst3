@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """Prints true when the change between two revisions needs the build and test jobs.
 
-Docs, config and version numbers build nothing. Every other file needs a build.
+Docs, config and version numbers build nothing. Every other file needs a build,
+and so does the root README: docs_commands_test.py runs the commands it documents.
 """
 import re
 import subprocess
 import sys
 
 UNBUILT_PATH = re.compile(
-    r'\.md$|^docs/|^\.claude/|^\.gitignore$|^LICENSE$|^Makefile$'
+    r'(?<!^README)\.md$|^docs/|^\.claude/|^\.gitignore$|^LICENSE$|^Makefile$'
     r'|^\.github/workflows/ci\.yml$|^\.github/ci_changes(_test)?\.py$')
 
 

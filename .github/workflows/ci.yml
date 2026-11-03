@@ -313,6 +313,7 @@ jobs:
       - run: python3 flutter_vst3/test/native/build_rules_make_test.py
       - run: python3 flutter_vst3/test/native/build_rules_flutter_test.py
       - run: python3 flutter_vst3/test/native/docs_commands_test.py
+        if: needs.changes.outputs.code == 'true'
 
   # Phase 3: check coverage. Runs no tests.
 

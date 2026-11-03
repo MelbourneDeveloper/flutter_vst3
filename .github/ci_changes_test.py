@@ -12,7 +12,7 @@ SCRIPT = ROOT / '.github/ci_changes.py'
 PUBSPEC = 'name: a\nversion: 1.0.0\ndependencies:\n  ffi: ^2.1.0\n'
 LOCK = ('packages:\n  ffi:\n    source: hosted\n    version: "2.1.0"\n'
         '  flutter_vst3:\n    source: path\n    version: "0.1.2"\n')
-BASE = {'lib/a.dart': 'code\n', 'README.md': 'old\n', 'pubspec.yaml': PUBSPEC, 'pubspec.lock': LOCK,
+BASE = {'lib/a.dart': 'code\n', 'README.md': 'old\n', 'pkg/README.md': 'old\n', 'pubspec.yaml': PUBSPEC, 'pubspec.lock': LOCK,
         'Makefile': 'all:\n', 'docs/a.txt': 'old\n'}
 
 
@@ -46,22 +46,22 @@ def classify(files, deleted=()):
 
 class Classifier(unittest.TestCase):
     def test_unbuilt_changes_skip(self):
-        for files in ({}, {'README.md': 'new\n'}, {'docs/a.txt': 'new\n'}, {'Makefile': 'other:\n'},
+        for files in ({}, {'pkg/README.md': 'new\n'}, {'docs/a.txt': 'new\n'}, {'Makefile': 'other:\n'},
                       {'.gitignore': 'x\n'}, {'.claude/settings.json': '{}\n'},
                       {'.github/workflows/ci.yml': 'x\n'}, {'pkg/CHANGELOG.md': 'x\n'},
                       {'pubspec.yaml': PUBSPEC.replace('1.0.0', '2.0.0')},
                       {'pubspec.lock': LOCK.replace('0.1.2', '0.2.0')}):
             self.assertEqual(classify(files), 'false', files)
-        self.assertEqual(classify({}, deleted=['README.md']), 'false')
+        self.assertEqual(classify({}, deleted=['pkg/README.md']), 'false')
 
     def test_built_changes_run(self):
-        for files in ({'lib/a.dart': 'new\n'}, {'lib/new.dart': 'new\n'}, {'a.md.dart': 'x\n'},
+        for files in ({'README.md': 'new\n'}, {'lib/a.dart': 'new\n'}, {'lib/new.dart': 'new\n'}, {'a.md.dart': 'x\n'},
                       {'pkg/Makefile': 'x\n'}, {'native/a.cpp': 'x\n'}, {'.github/actions/a.yml': 'x\n'},
                       {'pubspec.yaml': PUBSPEC.replace('^2.1.0', '^2.2.0')},
                       {'pubspec.yaml': PUBSPEC.replace('1.0.0', '2.0.0') + 'x: y\n'},
                       {'pubspec.lock': LOCK.replace('"2.1.0"', '"2.2.0"')},
                       {'pkg/pubspec.yaml': PUBSPEC},
-                      {'README.md': 'new\n', 'lib/a.dart': 'new\n'}):
+                      {'pkg/README.md': 'new\n', 'lib/a.dart': 'new\n'}):
             self.assertEqual(classify(files), 'true', files)
         self.assertEqual(classify({}, deleted=['lib/a.dart']), 'true')
         self.assertEqual(classify({}, deleted=['pubspec.yaml']), 'true')
@@ -90,6 +90,11 @@ class Workflow(unittest.TestCase):
         self.assertNotIn('if:', self.job('analyze').split('steps:')[0])
         self.assertIn('!cancelled()', self.job('repository-rules'))
         self.assertIn('ci_changes_test.py', self.job('repository-rules'))
+
+    def test_steps_that_need_binaries_run_only_with_a_build(self):
+        rules = self.job('repository-rules')
+        for step in ('restore-build', 'docs_commands_test.py'):
+            self.assertRegex(rules, re.escape(step) + r"\n\s+if: needs\.changes\.outputs\.code == 'true'")
 
 
 if __name__ == '__main__':
