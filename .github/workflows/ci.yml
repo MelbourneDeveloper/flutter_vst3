@@ -26,6 +26,7 @@ env:
     build/e2e
     libdart_vst_*
     dart_vst_host/libdart_vst_host.*
+    dart_vst_host/native/build/libdart_vst_host.*
     dart_vst_graph/libdart_vst_graph.*
 
 jobs:

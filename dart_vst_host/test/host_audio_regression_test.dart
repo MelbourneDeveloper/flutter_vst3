@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:dart_vst_host/dart_vst_host.dart';
 import 'package:test/test.dart';
+import 'plugin_fixture.dart';
 
 /// Verifies real native plugin loading and exact stereo processing.
 void main() {
@@ -9,30 +10,13 @@ void main() {
     final host = VstHost.create(sampleRate: 48000, maxBlock: 512,
         dylibPath: File(_library()).absolute.path);
     addTearDown(host.dispose);
-    final plugin = host.load(_fixture());
+    final plugin = host.load(pluginFixture());
     addTearDown(plugin.unload);
     expect(plugin.setParamNormalized(100, 0), isTrue);
     expect(plugin.resume(sampleRate: 48000, maxBlock: 512), isTrue);
     addTearDown(plugin.suspend);
     _assertImpulse(plugin);
   }, timeout: const Timeout(Duration(minutes: 10)));
-}
-
-String _fixture() {
-  final sdk = Platform.environment['VST3_SDK_DIR'] ??
-      (throw StateError('Set VST3_SDK_DIR to build ADelay'));
-  final build = Directory.systemTemp.createTempSync('review_c_adelay_');
-  addTearDown(() => build.deleteSync(recursive: true));
-  _cmake(['-S', sdk, '-B', build.path, '-DCMAKE_BUILD_TYPE=Release',
-    '-DSMTG_ENABLE_VSTGUI_SUPPORT=OFF', '-DSMTG_CREATE_PLUGIN_LINK=OFF',
-    '-DSMTG_ENABLE_VST3_HOSTING_EXAMPLES=OFF']);
-  _cmake(['--build', build.path, '--target', 'adelay', '--parallel', '2']);
-  return '${build.path}/VST3/Release/adelay.vst3';
-}
-
-void _cmake(List<String> arguments) {
-  final result = Process.runSync('cmake', arguments);
-  expect(result.exitCode, 0, reason: '${result.stdout}\n${result.stderr}');
 }
 
 String _library() => switch (Platform.operatingSystem) {
