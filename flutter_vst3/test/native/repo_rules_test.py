@@ -102,7 +102,8 @@ class RemovedDesignTests(unittest.TestCase):
 
 class AgentSetup(unittest.TestCase):
     def test_standard_make_targets_exist(self):
-        for target in ('deslop', 'coverage-check', 'lint', 'fmt', 'ci', 'setup', 'test', 'build', 'clean'):
+        for target in ('deslop', 'coverage-check', 'lint', 'fmt', 'ci', 'setup', 'test', 'build', 'clean',
+                       'deploy', 'deploy-echo', 'deploy-reverb', 'echo', 'reverb'):
             result = subprocess.run(['make', '-n', target], cwd=ROOT, stdout=subprocess.PIPE,
                                     stderr=subprocess.STDOUT, text=True)
             self.assertEqual(0, result.returncode, target + ': ' + result.stdout)

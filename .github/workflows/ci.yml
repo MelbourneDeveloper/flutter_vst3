@@ -222,7 +222,7 @@ jobs:
       - run: python3 flutter_vst3/test/native/generator_strings_test.py
 
   windows-public-build:
-    name: 'Test: Windows public build and install'
+    name: 'Test: Windows public build and deploy'
     needs: [analyze, build]
     runs-on: windows-latest
     steps:
@@ -236,7 +236,7 @@ jobs:
       - name: Public commands and installed workers
         shell: pwsh
         run: |
-          foreach ($target in @('reverb', 'echo', 'install')) {
+          foreach ($target in @('reverb', 'echo', 'deploy')) {
             & ./build.bat $target
             if ($LASTEXITCODE -ne 0) { throw "build.bat $target failed ($LASTEXITCODE)" }
           }

@@ -173,11 +173,13 @@ sequenceDiagram
 make
 
 # Build specific plugins:
-make reverb-vst       # Build flutter_reverb.vst3
-make echo-vst         # Build echo.vst3
+make reverb           # Build flutter_reverb.vst3
+make echo             # Build echo.vst3
 
-# Install to system VST folder
-make install
+# Build, then copy to the folder VST3 hosts scan
+make deploy           # Echo and Reverb
+make deploy-echo      # Echo only (or: make -C vsts/echo deploy)
+make deploy-reverb    # Reverb only (or: make -C vsts/flutter_reverb deploy)
 ```
 
 **Windows (PowerShell or Command Prompt):**
@@ -192,15 +194,17 @@ make install
 :: Build native libraries only (dart_vst_host & dart_vst_graph)
 ./build.bat native
 
-:: Install plugins to user VST3 folder (%LOCALAPPDATA%\Programs\Common\VST3\)
-.\build.bat install
+:: Build, then copy plugins to the user VST3 folder (%LOCALAPPDATA%\Programs\Common\VST3\)
+.\build.bat deploy
+.\build.bat deploy-echo
+.\build.bat deploy-reverb
 
 :: Clean build artifacts
 .\build.bat clean
 ```
 
 > [!NOTE]
-> `.\build.bat install` copies plugins to the standard user directory `C:\Users\<user>\AppData\Local\Programs\Common\VST3\`. It does not require Administrator privileges.
+> `.\build.bat deploy` copies plugins to the standard user directory `C:\Users\<user>\AppData\Local\Programs\Common\VST3\`. It does not require Administrator privileges.
 
 2. **Test in your DAW:**
 - macOS: `~/Library/Audio/Plug-Ins/VST3/`
@@ -354,7 +358,7 @@ flutter_vst3_toolkit/
 1. Design UI in Flutter with hot reload
 2. Implement audio processing in pure Dart
 3. Test with `flutter test`; plugins with a Flutter entrypoint can also use `flutter run`
-4. Build VST® 3: `make echo-vst`
+4. Build and deploy VST® 3: `make deploy-echo`
 5. Load in DAW and test
 
 ### Parameter Binding System
@@ -390,7 +394,7 @@ build.bat test        # Windows (or .\build.ps1 test)
 
 # Interactive testing with example plugins
 # (On Linux, set GDK_BACKEND=x11 so native VST3 GUIs can be displayed)
-# Reverb has no standalone app: build with make reverb-vst and load in a VST3 host.
+# Reverb has no standalone app: build with make deploy-reverb and load in a VST3 host.
 # On Linux:
 (cd vsts/echo && GDK_BACKEND=x11 flutter run)
 ```

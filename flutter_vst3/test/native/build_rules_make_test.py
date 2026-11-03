@@ -3,6 +3,7 @@ import os
 import pathlib
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 import unittest
@@ -71,6 +72,45 @@ class PublicMakeTargets(unittest.TestCase):
             self.assertTrue(path.is_file(), str(path))
             self.assertGreater(path.stat().st_mtime_ns, start, str(path))
             self.assertEqual((root / path.name).read_bytes(), path.read_bytes())
+
+
+class DeployTargets(unittest.TestCase):
+    def deploy(self, root, home, plugin):
+        env = dict(os.environ, HOME=str(home))
+        return subprocess.run(['make', '-C', 'vsts/' + plugin, '-o', 'build', 'deploy'], cwd=root,
+                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env)
+
+    def test_deploy_copies_one_plugin_and_fails_without_touching_a_missing_build(self):
+        root = scratch()
+        home = pathlib.Path(tempfile.mkdtemp(prefix='review_c_home_'))
+        self.addCleanup(shutil.rmtree, root)
+        self.addCleanup(shutil.rmtree, home)
+        folder = home / ('Library/Audio/Plug-Ins/VST3' if sys.platform == 'darwin' else '.vst3')
+        folder.mkdir(parents=True)
+        (folder / 'echo.vst3').symlink_to(home / 'gone')
+        (folder / 'other.vst3').mkdir()
+        bundles = {name: root / 'vsts' / name / 'build/VST3/Release' / (name + '.vst3')
+                   for name in ('echo', 'flutter_reverb')}
+        for name, bundle in bundles.items():
+            bundle.mkdir(parents=True)
+            (bundle / 'marker').write_text(name)
+
+        echo = self.deploy(root, home, 'echo')
+        self.assertEqual(0, echo.returncode, echo.stdout)
+        self.assertFalse((folder / 'echo.vst3').is_symlink())
+        self.assertEqual('echo', (folder / 'echo.vst3/marker').read_text())
+        self.assertFalse((folder / 'flutter_reverb.vst3').exists())
+        self.assertTrue((folder / 'other.vst3').is_dir())
+
+        reverb = self.deploy(root, home, 'flutter_reverb')
+        self.assertEqual(0, reverb.returncode, reverb.stdout)
+        self.assertEqual('flutter_reverb', (folder / 'flutter_reverb.vst3/marker').read_text())
+        self.assertEqual('echo', (folder / 'echo.vst3/marker').read_text())
+
+        shutil.rmtree(bundles['echo'])
+        missing = self.deploy(root, home, 'echo')
+        self.assertNotEqual(0, missing.returncode, missing.stdout)
+        self.assertEqual('echo', (folder / 'echo.vst3/marker').read_text())
 
 
 if __name__ == '__main__':

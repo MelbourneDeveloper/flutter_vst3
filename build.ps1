@@ -83,10 +83,11 @@ function Clean-Native {
 function Clean-Plugin {
     foreach ($p in @('echo', 'flutter_reverb')) { Remove-Build "vsts/$p/build" }
 }
-function Install-Plugins {
+function Deploy-Plugins {
+    param([string[]]$Plugins)
     $dest = "$env:LOCALAPPDATA/Programs/Common/VST3"
     New-Item -ItemType Directory -Force $dest | Out-Null
-    foreach ($p in @('echo', 'flutter_reverb')) {
+    foreach ($p in $Plugins) {
         Build-Plugin $p
         Remove-Build "$dest/$p.vst3"
         Copy-Item "vsts/$p/build/VST3/Release/$p.vst3" $dest -Recurse -Force
@@ -94,8 +95,8 @@ function Install-Plugins {
 }
 
 switch ($Target.ToLower()) {
-    { $_ -in 'all', 'reverb', 'reverb-vst', 'reverb-build-only' } { Build-Plugin 'flutter_reverb' }
-    { $_ -in 'echo', 'echo-vst', 'echo-build-only' } { Build-Plugin 'echo' }
+    { $_ -in 'all', 'reverb' } { Build-Plugin 'flutter_reverb' }
+    'echo' { Build-Plugin 'echo' }
     'native' { Build-Native }
     'build' { Build-Native; Build-Plugin 'echo'; Build-Plugin 'flutter_reverb' }
     'dart-deps' { Dart-Deps }
@@ -108,7 +109,9 @@ switch ($Target.ToLower()) {
     'clean' { Clean-Native; Clean-Plugin }
     'clean-native' { Clean-Native }
     'clean-plugin' { Clean-Plugin }
-    'install' { Install-Plugins }
-    'help' { Write-Host 'Targets: native, build, reverb, echo, test, test-native, test-host, test-graph, dart-deps, install, clean' }
+    'deploy' { Deploy-Plugins @('echo', 'flutter_reverb') }
+    'deploy-echo' { Deploy-Plugins @('echo') }
+    'deploy-reverb' { Deploy-Plugins @('flutter_reverb') }
+    'help' { Write-Host 'Targets: native, build, reverb, echo, test, test-native, test-host, test-graph, dart-deps, deploy, deploy-echo, deploy-reverb, clean' }
     default { throw "Unknown target: $Target" }
 }

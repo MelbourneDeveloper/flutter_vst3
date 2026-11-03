@@ -1,93 +1,78 @@
 # agent-pmo:372ce7f
-# Flutter VST3 toolkit: run from the repository root.
+# Flutter VST3 toolkit: run from the repository root. Each package has its own
+# Makefile; targets starting with _ are private to the build.
 .DEFAULT_GOAL := reverb
-.SHELLFLAGS := -ec
-VST3_SDK_DIR ?= $(CURDIR)/vst3sdk
-export VST3_SDK_DIR
-FLUTTER_BUILD_MODE ?= release
-.PHONY: all deslop lint fmt ci setup build native plugin test test-native test-host test-graph coverage-check dart-deps reverb-deps echo-deps flutter-deps reverb reverb-vst reverb-build-only echo echo-vst echo-build-only echo-flutter install clean clean-native clean-plugin check-env help
+include mk/common.mk
+PACKAGES ?= dart_vst_host dart_vst_graph flutter_vst3 vsts/flutter_reverb vsts/echo
+.PHONY: help deploy deploy-echo deploy-reverb echo reverb build native dart-deps lint fmt deslop test coverage-check ci setup clean _plugin _test-native _test-host _test-graph _check-env
 
-all: reverb
-build: native dart-deps plugin
+## deploy: Build Echo and Reverb, then copy both to the folder VST3 hosts scan.
+## deploy-echo: Build Echo, then copy it to that folder.
+## deploy-reverb: Build Reverb, then copy it to that folder.
+## echo: Build echo.vst3.
+## reverb: Build flutter_reverb.vst3.
+deploy deploy-echo deploy-reverb echo reverb:
+	$(MAKE) -C vsts $@
+
+## build: Build the native libraries and both plugins.
+build: native dart-deps _plugin
+_plugin:
+	$(MAKE) -C vsts build
+
+## native: Build the host and graph libraries.
 native:
-	test -d "$(VST3_SDK_DIR)"
-	cmake -S dart_vst_host/native -B dart_vst_host/native/build -DCMAKE_BUILD_TYPE=Release
-	cmake --build dart_vst_host/native/build --parallel
-	cp dart_vst_host/native/build/libdart_vst_host.* .
-	cp dart_vst_host/native/build/libdart_vst_host.* dart_vst_host/
-	cmake -S dart_vst_graph/native -B dart_vst_graph/native/build -DCMAKE_BUILD_TYPE=Release
-	cmake --build dart_vst_graph/native/build --parallel
-	cp dart_vst_graph/native/build/libdart_vst_graph.* .
-	cp dart_vst_graph/native/build/libdart_vst_graph.* dart_vst_graph/
+	$(MAKE) -C dart_vst_graph _native
 
+## dart-deps: Resolve dependencies in every package.
 dart-deps:
-	cd dart_vst_host && dart pub get
-	cd dart_vst_graph && dart pub get
-	cd flutter_vst3 && flutter pub get
-	cd vsts/echo && flutter pub get
-	cd vsts/flutter_reverb && flutter pub get
-reverb-deps:
-	cd flutter_vst3 && flutter pub get
-	cd vsts/flutter_reverb && flutter pub get
-echo-deps:
-	cd flutter_vst3 && flutter pub get
-	cd vsts/echo && flutter pub get
-flutter-deps: dart-deps
+	for package in $(PACKAGES); do $(MAKE) -C "$$package" _deps || exit 1; done
 
-reverb reverb-vst reverb-build-only: reverb-deps
-	cmake -S vsts/flutter_reverb -B vsts/flutter_reverb/build -DCMAKE_BUILD_TYPE=Release
-	cmake --build vsts/flutter_reverb/build --parallel
-echo-flutter: echo-deps
-	case "$$(uname)" in Darwin) platform=macos;; Linux) platform=linux;; MINGW*|MSYS*|CYGWIN*) platform=windows;; *) echo 'Unsupported platform' >&2; exit 1;; esac; \
-	cd vsts/echo && flutter build $$platform --$(FLUTTER_BUILD_MODE)
-echo echo-vst echo-build-only: echo-flutter
-	cmake -S vsts/echo -B vsts/echo/build -DCMAKE_BUILD_TYPE=Release
-	cmake --build vsts/echo/build --parallel
-plugin: reverb echo
-
+## lint: Analyze every package.
 lint: dart-deps
-	cd dart_vst_host && dart analyze
-	cd dart_vst_graph && dart analyze
-	cd flutter_vst3 && flutter analyze
-	cd vsts/flutter_reverb && flutter analyze
-	cd vsts/echo && flutter analyze
+	for package in $(PACKAGES); do $(MAKE) -C "$$package" _lint || exit 1; done
+
+## fmt: Format every package.
 fmt:
 	dart format dart_vst_host/lib dart_vst_host/test dart_vst_graph/lib dart_vst_graph/test flutter_vst3/lib flutter_vst3/test vsts/echo/lib vsts/echo/test vsts/flutter_reverb/lib vsts/flutter_reverb/test
+
+## deslop: Fail if duplication is above the ceiling in .deslop.toml.
 deslop:
 	deslop . --nohtml --nojson --no-color --log-level error
-ci: deslop lint build test coverage-check
-setup:
-	./setup.sh
-test: native dart-deps test-native
-	bash flutter_vst3/test/native/run_package_coverage.sh dart_vst_host
-	bash flutter_vst3/test/native/run_package_coverage.sh dart_vst_graph
-	bash flutter_vst3/test/native/run_package_coverage.sh flutter_vst3
-	bash flutter_vst3/test/native/run_package_coverage.sh vsts/flutter_reverb
-	bash flutter_vst3/test/native/run_package_coverage.sh vsts/echo
-test-native:
+
+## test: Run every test with coverage.
+test: native dart-deps _test-native
+	for package in $(PACKAGES); do $(MAKE) -C "$$package" _test || exit 1; done
+_test-native:
 	bash flutter_vst3/test/native/run.sh
-test-host: native
-	cd dart_vst_host && dart pub get && dart test
-test-graph: native
-	cd dart_vst_graph && dart pub get && dart test
+_test-host: native
+	$(MAKE) -C dart_vst_host _deps _test
+_test-graph: native
+	$(MAKE) -C dart_vst_graph _deps _test
+
+## coverage-check: Check coverage reports against coverage-thresholds.json. Runs no tests.
 coverage-check:
 	python3 flutter_vst3/test/native/coverage_check.py
 
-install: plugin
-	case "$$(uname)" in Darwin) dest="$$HOME/Library/Audio/Plug-Ins/VST3";; Linux) dest="$$HOME/.vst3";; MINGW*|MSYS*|CYGWIN*) dest="$$LOCALAPPDATA/Programs/Common/VST3";; *) echo 'Unsupported platform' >&2; exit 1;; esac; \
-	mkdir -p "$$dest"; \
-	for name in echo flutter_reverb; do rm -rf "$$dest/$$name.vst3"; cp -R "vsts/$$name/build/VST3/Release/$$name.vst3" "$$dest/"; done
-clean: clean-native clean-plugin
-	rm -f libdart_vst_host.* libdart_vst_graph.* dart_vst_host/libdart_vst_host.* dart_vst_graph/libdart_vst_graph.*
-clean-native:
-	rm -rf dart_vst_host/native/build dart_vst_graph/native/build
-clean-plugin:
-	rm -rf vsts/echo/build vsts/flutter_reverb/build
-check-env:
+## ci: Run the same phases as CI: build, test, coverage.
+ci: deslop lint build test coverage-check
+
+## setup: Fetch the VST3 SDK and build the native libraries.
+setup:
+	./setup.sh
+
+## clean: Delete all build output.
+clean:
+	$(MAKE) -C dart_vst_host _clean
+	$(MAKE) -C dart_vst_graph _clean
+	$(MAKE) -C vsts _clean
+
+_check-env:
 	test -d "$(VST3_SDK_DIR)"
 	command -v cmake
 	command -v dart
 	command -v flutter
+
+## help: List the public targets.
 help:
-	@echo 'Targets: deslop, lint, fmt, ci, setup, native, dart-deps, reverb, echo, plugin, test, test-native, test-host, test-graph, coverage-check, install, clean'
+	@sed -n 's/^## //p' $(MAKEFILE_LIST)
 	@echo 'Set VST3_SDK_DIR to the Steinberg SDK root. Flutter is required for plugin packages.'
