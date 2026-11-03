@@ -12,23 +12,32 @@ Follow the [Complete Step-by-Step Plugin Creation Guide](../create_plugin_guide.
 ## Basic Plugin Structure
 
 ```dart
+import 'dart:typed_data';
 import 'package:flutter_vst3/flutter_vst3.dart';
 
-class MyProcessor extends VST3Processor {
+final class MyProcessor implements Vst3WorkerProcessor {
   @override
-  void initialize(double sampleRate, int maxBlockSize) {
-    // Initialize your audio processing
+  void initialize(double sampleRate, int maxBlockSize) {}
+
+  @override
+  void setParameter(int paramId, double value) {}
+
+  @override
+  void processStereo(Float32List inputL, Float32List inputR,
+      Float32List outputL, Float32List outputR) {
+    outputL.setAll(0, inputL);
+    outputR.setAll(0, inputR);
   }
 
   @override
-  void processStereo(List<double> inputL, List<double> inputR,
-                    List<double> outputL, List<double> outputR) {
-    // Your audio processing logic here
-    for (int i = 0; i < inputL.length; i++) {
-      outputL[i] = inputL[i]; // Pass through for now
-      outputR[i] = inputR[i];
-    }
-  }
+  void reset() {}
+
+  @override
+  void dispose() {}
+}
+
+void main(List<String> args) {
+  runVst3SharedMemoryProcessor(args: args, processor: MyProcessor());
 }
 ```
 

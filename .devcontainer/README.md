@@ -39,7 +39,7 @@ The container automatically sets:
 
 After the container starts, run:
 ```bash
-make check-env
+make _check-env
 ```
 
 This should show all dependencies as available.

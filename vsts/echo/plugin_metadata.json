@@ -1,9 +1,12 @@
 {
   "pluginName": "Echo",
+  "flutterEntrypoint": "echoMain",
   "vendor": "CF",
   "version": "1.0.0",
   "category": "Fx|Delay",
   "bundleIdentifier": "com.cf.echo",
+  "processorUid": "F9D0C991074C84044D825FC521E8F92B",
+  "controllerUid": "A011573216F065964B9846B6007933D0",
   "companyWeb": "https://cf.com",
   "companyEmail": "info@cf.com",
   "parameters": [
@@ -19,7 +22,7 @@
       "id": 1,
       "name": "feedback",
       "displayName": "Feedback",
-      "description": "Controls the feedback amount (0% = single echo, 100% = infinite)",
+      "description": "Controls decaying feedback (0% = single echo, 100% = stable 0.85 loop gain, 15% decay per repeat)",
       "defaultValue": 0.3,
       "units": "%"
     },

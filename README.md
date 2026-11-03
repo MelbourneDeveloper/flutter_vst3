@@ -112,7 +112,7 @@ sequenceDiagram
 **Primary Purpose: Build VST® 3 plugins with Flutter UIs that compile to .vst3 bundles**
 
 - **`flutter_vst3`** - Complete framework that auto-generates all C++ VST® 3 boilerplate from Dart
-- **`vsts/flutter_reverb`** - Example VST® 3 reverb plugin with Flutter UI  
+- **`vsts/flutter_reverb`** - Example VST® 3 reverb plugin with native sliders (no standalone Flutter app)  
 - **`vsts/echo`** - Example VST® 3 echo/delay plugin with Flutter UI
 - **Native Executable Compilation** - Dart compiles to native machine code (no runtime required)
 
@@ -146,39 +146,73 @@ sequenceDiagram
 ### Cross-Platform Support
 - ✅ **macOS** - Universal binaries (Intel + Apple Silicon)
 - ✅ **Windows** - Native Windows VST® 3 support
-- ✅ **Linux** - Full Linux VST® 3 support
+- ✅ **Linux** - Full Linux VST® 3 support (X11 desktop backend for GUI; run with `GDK_BACKEND=x11`)
 
 ## Quick Start
 
 ### Prerequisites
 
 ```bash
-# Download Steinberg VST® 3 SDK
-./setup.sh  # Automatically downloads SDK and builds native libraries
+# macOS / Linux: Download Steinberg VST® 3 SDK & build native libraries
+./setup.sh
 
-# Or manually set VST3_SDK_DIR
-export VST3_SDK_DIR=/path/to/vst3sdk
+# Windows (Command Prompt or PowerShell):
+.\setup.bat   # or .\setup.ps1
 ```
+
+> [!TIP]
+> If running `.ps1` scripts in PowerShell gives an execution policy error, simply run `.\setup.bat` and `.\build.bat`, or allow local scripts once via `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
 
 ### Building Your First VST® Plugin
 
 1. **Build the example plugins:**
+
+**macOS / Linux:**
 ```bash
 # Build Flutter Reverb VST® 3 (default)
 make
 
 # Build specific plugins:
-make reverb-vst       # Build flutter_reverb.vst3
-make echo-vst         # Build echo.vst3
+make reverb           # Build flutter_reverb.vst3
+make echo             # Build echo.vst3
 
-# Install to system VST folder
-make install
+# Build, then copy to the folder VST3 hosts scan
+make deploy           # Echo and Reverb
+make deploy-echo      # Echo only (or: make -C vsts/echo deploy)
+make deploy-reverb    # Reverb only (or: make -C vsts/flutter_reverb deploy)
 ```
+
+**Windows (PowerShell or Command Prompt):**
+```cmd
+:: Build Flutter Reverb VST® 3 (default)
+./build.bat
+
+:: Build specific plugins:
+./build.bat reverb
+./build.bat echo
+
+:: Build native libraries only (dart_vst_host & dart_vst_graph)
+./build.bat native
+
+:: Build, then copy plugins to the user VST3 folder (%LOCALAPPDATA%\Programs\Common\VST3\)
+.\build.bat deploy
+.\build.bat deploy-echo
+.\build.bat deploy-reverb
+
+:: Clean build artifacts
+.\build.bat clean
+```
+
+> [!NOTE]
+> `.\build.bat deploy` copies plugins to the standard user directory `C:\Users\<user>\AppData\Local\Programs\Common\VST3\`. It does not require Administrator privileges.
 
 2. **Test in your DAW:**
 - macOS: `~/Library/Audio/Plug-Ins/VST3/`
-- Windows: `C:\Program Files\Common Files\VST3\`
+- Windows: `C:\Users\<user>\AppData\Local\Programs\Common\VST3\`
 - Linux: `~/.vst3/`
+
+> [!IMPORTANT]
+> **Linux GUI Requirement**: The standard VST3 windowing backend on Linux uses **X11**. Any application or host running VST3 plugins with a graphical interface on Linux must be launched with the `GDK_BACKEND=x11` environment variable (e.g. `GDK_BACKEND=x11 flutter run`), otherwise the GUI will not be displayed on Wayland desktop sessions.
 
 ### Creating Your Own VST® Plugin
 
@@ -213,54 +247,46 @@ class MyProcessor {
 ```dart
 // lib/my_ui_main.dart
 import 'package:flutter/material.dart';
-import 'package:flutter_vst3/flutter_vst3.dart';
+import 'package:flutter_vst3/ui.dart';
 
 void main() {
-  runApp(MyPluginUI());
+  runApp(const MaterialApp(home: MyPluginUI()));
 }
 
 class MyPluginUI extends StatefulWidget {
+  const MyPluginUI({super.key});
+
   @override
-  _MyPluginUIState createState() => _MyPluginUIState();
+  State<MyPluginUI> createState() => _MyPluginUIState();
 }
 
 class _MyPluginUIState extends State<MyPluginUI> {
-  final parameters = MyParameters();
-  
+  static const gainParam = 0;
+  final VST3ParameterBinding _binding = VST3ParameterBinding.getInstance();
+
+  void _rebuild() => setState(() {});
+
   @override
   void initState() {
     super.initState();
-    // Register for DAW parameter changes
-    VST3Bridge.registerParameterChangeCallback(_onParameterChanged);
+    _binding.addListener(_rebuild);
+    _binding.loadInitialParameters();
   }
-  
-  void _onParameterChanged(int paramId, double value) {
-    setState(() {
-      parameters.setParameter(paramId, value);
-    });
+
+  @override
+  void dispose() {
+    _binding.removeListener(_rebuild);
+    super.dispose();
   }
-  
-  void _updateParameter(int paramId, double value) {
-    setState(() {
-      parameters.setParameter(paramId, value);
-    });
-    // Send to VST host/DAW
-    VST3Bridge.sendParameterToHost(paramId, value);
-  }
-  
+
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      home: Scaffold(
-        body: Column(
-          children: [
-            Text('My VST Plugin'),
-            Slider(
-              value: parameters.gain,
-              onChanged: (v) => _updateParameter(0, v),
-            ),
-          ],
-        ),
+    return Scaffold(
+      body: Slider(
+        value: _binding.getParameter(gainParam),
+        onChangeStart: (_) => _binding.beginEdit(gainParam),
+        onChanged: (value) => _binding.setParameter(gainParam, value),
+        onChangeEnd: (_) => _binding.endEdit(gainParam),
       ),
     );
   }
@@ -302,11 +328,11 @@ void main() async {
 flutter_vst3_toolkit/
 ├── flutter_vst3/           # Framework for building VST® 3 plugins with Flutter
 │   ├── lib/
-│   │   ├── flutter_vst3.dart
+│   │   ├── flutter_vst3.dart   # DSP worker API
+│   │   ├── ui.dart             # Flutter editor API
 │   │   └── src/
-│   │       ├── flutter_vst3_bridge.dart    # DAW ↔ Flutter binding
-│   │       ├── flutter_vst3_callbacks.dart # FFI callbacks
-│   │       └── flutter_vst3_parameters.dart # Parameter management
+│   │       ├── vst3_worker_loop.dart      # DSP worker over shared memory
+│   │       └── parameter_binding.dart     # Editor ↔ DAW parameters
 │   ├── native/             # C++ templates and CMake helpers
 │   └── scripts/            # Plugin generation scripts
 ├── vsts/
@@ -323,8 +349,8 @@ flutter_vst3_toolkit/
 ### VST® Plugin Development
 1. Design UI in Flutter with hot reload
 2. Implement audio processing in pure Dart
-3. Test with `flutter run`
-4. Build VST® 3: `make echo-vst`
+3. Test with `flutter test`; plugins with a Flutter entrypoint can also use `flutter run`
+4. Build and deploy VST® 3: `make deploy-echo`
 5. Load in DAW and test
 
 ### Parameter Binding System
@@ -349,16 +375,20 @@ The framework provides automatic 3-way parameter binding:
 
 ```bash
 # Run all tests
-make test
+make test             # macOS / Linux
+build.bat test        # Windows (or .\build.ps1 test)
 
 # Test individual packages
-cd flutter_vst3 && dart test
-cd vsts/echo && dart test
-cd dart_vst_host && dart test
-cd dart_vst_graph && dart test
+(cd flutter_vst3 && flutter test)
+(cd vsts/echo && flutter test)
+(cd dart_vst_host && dart test)
+(cd dart_vst_graph && dart test)
 
 # Interactive testing with example plugins
-cd vsts/flutter_reverb && flutter run
+# (On Linux, set GDK_BACKEND=x11 so native VST3 GUIs can be displayed)
+# Reverb has no standalone app: build with make deploy-reverb and load in a VST3 host.
+# On Linux:
+(cd vsts/echo && GDK_BACKEND=x11 flutter run)
 ```
 
 ## Contributing

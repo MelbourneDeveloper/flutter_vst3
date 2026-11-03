@@ -1,3 +1,7 @@
+## Unreleased
+
+- Removed obsolete same-process VST3Bridge registration and FFI callbacks; use the shared-memory worker.
+
 ## 0.1.2
 
 * Corrections

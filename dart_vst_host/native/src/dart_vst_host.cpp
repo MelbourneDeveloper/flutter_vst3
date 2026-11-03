@@ -52,11 +52,12 @@ struct DVH_HostState {
 struct DVH_PluginState {
   std::shared_ptr<VST3::Hosting::Module> module;
   VST3::Hosting::ClassInfo classInfo;
+  // Owns initialization, the component/controller connection and terminate.
+  // Declared after module, so the module outlives it.
+  IPtr<Vst::PlugProvider> provider;
   IPtr<IComponent> component;
   IPtr<IAudioProcessor> processor;
   IPtr<IEditController> controller;
-  IPtr<IConnectionPoint> compCP;
-  IPtr<IConnectionPoint> ctrlCP;
 
   ParameterChanges inputParamChanges;
   ParameterChanges outputParamChanges;
@@ -125,12 +126,16 @@ DVH_Plugin dvh_load_plugin(DVH_Host host, const char* module_path_utf8, const ch
   }
   if (!found) return nullptr;
 
-  auto plugProvider = std::make_shared<Vst::PlugProvider>(mod->getFactory(), chosen, true);
+  // PlugProvider reads the context while initializing, and the most recently
+  // created host may not be this one.
+  Vst::PluginContextFactory::instance().setPluginContext(&hs->hostApp);
+  auto plugProvider = owned(new Vst::PlugProvider(mod->getFactory(), chosen, true));
   if (!plugProvider->initialize()) return nullptr;
 
   auto* ps = new DVH_PluginState();
   ps->module = mod;
   ps->classInfo = chosen;
+  ps->provider = plugProvider;
   ps->component = plugProvider->getComponentPtr();
   ps->controller = plugProvider->getControllerPtr();
 
@@ -144,25 +149,10 @@ DVH_Plugin dvh_load_plugin(DVH_Host host, const char* module_path_utf8, const ch
     return nullptr;
   }
 
-  ps->component->initialize(&((DVH_HostState*)host)->hostApp);
-  if (ps->controller)
-    ps->controller->initialize(&((DVH_HostState*)host)->hostApp);
-
-  // Connect component and controller via IConnectionPoint if both
-  // expose it. This is necessary for parameter automation to flow.
-  ps->component->queryInterface(IConnectionPoint::iid, (void**)&ps->compCP);
-  if (ps->controller)
-    ps->controller->queryInterface(IConnectionPoint::iid, (void**)&ps->ctrlCP);
-  if (ps->compCP && ps->ctrlCP) {
-    ps->compCP->connect(ps->ctrlCP);
-    ps->ctrlCP->connect(ps->compCP);
-  }
-
   return (DVH_Plugin)ps;
 }
 
-// Unload a previously loaded plug‑in. Terminates the component and
-// controller and frees the DVH_PluginState. Does nothing if p is
+// Unload a previously loaded plug‑in. Deactivates it and frees the DVH_PluginState. Does nothing if p is
 // nullptr.
 void dvh_unload_plugin(DVH_Plugin p) {
   if (!p) return;
@@ -171,12 +161,7 @@ void dvh_unload_plugin(DVH_Plugin p) {
     ps->processor->setProcessing(false);
     ps->component->setActive(false);
   }
-  if (ps->compCP && ps->ctrlCP) {
-    ps->compCP->disconnect(ps->ctrlCP);
-    ps->ctrlCP->disconnect(ps->compCP);
-  }
-  if (ps->controller) ps->controller->terminate();
-  if (ps->component) ps->component->terminate();
+  // The provider disconnects and terminates when it is destroyed.
   delete ps;
 }
 

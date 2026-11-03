@@ -1,103 +1,116 @@
+import 'dart:math' as math;
+import 'dart:typed_data';
 import 'echo_parameters.dart';
 
 /// Simple echo/delay effect processor that FAILS HARD without parameters
 class EchoProcessor {
-  static const int _delayBufferSize = 132300; // ~3 seconds at 44.1kHz
+  int _delayBufferSize = 0;
   
-  final List<double> _delayBufferL = List.filled(_delayBufferSize, 0.0);
-  final List<double> _delayBufferR = List.filled(_delayBufferSize, 0.0);
+  Float32List _delayBufferL = Float32List(0);
+  Float32List _delayBufferR = Float32List(0);
   int _writeIndex = 0;
   
   double _sampleRate = 44100.0;
   bool _initialized = false;
+  double _currentDelaySamples = -1.0;
+  double _smoothCoeff = 0.0;
 
   /// Initialize the echo processor
   void initialize(double sampleRate, int maxBlockSize) {
     _sampleRate = sampleRate;
+    sampleRate.isFinite && sampleRate > 0 && maxBlockSize > 0
+        ? null : throw ArgumentError("Invalid audio configuration");
+    _smoothCoeff = 1.0 - math.exp(-1.0 / (sampleRate * 0.03));
+    _delayBufferSize = sampleRate.ceil() + 2;
+    _delayBufferL = Float32List(_delayBufferSize);
+    _delayBufferR = Float32List(_delayBufferSize);
+    reset();
     _initialized = true;
   }
 
-  /// Process stereo audio block with parameters-driven echo that FAILS HARD
-  void processStereo(List<double> inputL, List<double> inputR, 
-                    List<double> outputL, List<double> outputR, 
-                    EchoParameters parameters) {
+  void _validateBuffers(
+    Float32List inL,
+    Float32List inR,
+    Float32List outL,
+    Float32List outR,
+  ) {
     if (!_initialized) {
-      throw StateError('ECHO PROCESSOR FAILURE: Not initialized! Cannot process audio without initialization!');
+      throw StateError(
+        'ECHO PROCESSOR FAILURE: Not initialized! Cannot process audio without initialization!',
+      );
     }
-    
-    if (inputL.length != inputR.length || outputL.length != inputL.length || outputR.length != inputL.length) {
-      throw ArgumentError('ECHO PROCESSOR FAILURE: Buffer length mismatch! All buffers must have the same length!');
-    }
-    
-    // Convert normalized parameters to actual values
-    final delayTime = parameters.delayTime; // 0.0 to 1.0 -> 0ms to 1000ms  
-    final feedback = parameters.feedback;   // 0.0 to 1.0 -> 0% to 100%
-    final mix = parameters.mix;             // 0.0 to 1.0 -> 0% to 100%
-    final bypass = parameters.bypass;       // 0.0 = active, 1.0 = bypassed
-    
-    // If bypassed, pass through clean signal
-    if (bypass > 0.5) {
-      for (int i = 0; i < inputL.length; i++) {
-        outputL[i] = inputL[i];
-        outputR[i] = inputR[i];
-      }
-      return;
-    }
-    
-    // Calculate delay in samples (scale from 0-1 to 10ms-500ms for musical range)
-    final delayMs = 10.0 + (delayTime * 490.0); // 10ms to 500ms range
-    final delayInSamples = (delayMs * _sampleRate / 1000.0).round().clamp(1, _delayBufferSize - 1);
-    
-    // Scale feedback for musical control
-    final feedbackAmount = feedback * 0.85; // Max 85% for stable feedback
-    
-    // Scale wet/dry mix for natural blend
-    final wetLevel = mix;
-    final dryLevel = (1.0 - mix);
-    
-    for (int i = 0; i < inputL.length; i++) {
-      // Calculate read index for delay
-      final readIndex = (_writeIndex - delayInSamples + _delayBufferSize) % _delayBufferSize;
-      
-      // Get delayed samples
-      final delayedL = _delayBufferL[readIndex];
-      final delayedR = _delayBufferR[readIndex];
-      
-      // Apply feedback with saturation
-      final saturatedFeedbackL = _softSaturate(delayedL * feedbackAmount);
-      final saturatedFeedbackR = _softSaturate(delayedR * feedbackAmount);
-      
-      // Write input + feedback to delay buffer
-      _delayBufferL[_writeIndex] = inputL[i] + saturatedFeedbackL;
-      _delayBufferR[_writeIndex] = inputR[i] + saturatedFeedbackR;
-      
-      // Clean wet signal with slight stereo width
-      final wetL = (delayedL * wetLevel) + (delayedR * wetLevel * 0.1);
-      final wetR = (delayedR * wetLevel) + (delayedL * wetLevel * 0.1);
-      
-      // Mix dry and wet signals
-      final finalL = (inputL[i] * dryLevel) + wetL;
-      final finalR = (inputR[i] * dryLevel) + wetR;
-      
-      outputL[i] = finalL;
-      outputR[i] = finalR;
-      
-      // Advance write index
-      _writeIndex = (_writeIndex + 1) % _delayBufferSize;
+    if (inL.length != inR.length ||
+        outL.length != inL.length ||
+        outR.length != inL.length) {
+      throw ArgumentError(
+        'ECHO PROCESSOR FAILURE: Buffer length mismatch! All buffers must have the same length!',
+      );
     }
   }
-  
-  /// Soft saturation for controlled feedback limiting
-  double _softSaturate(double x) {
-    return x > 1.0 ? 1.0 - (1.0 / (x + 1.0)) :
-           x < -1.0 ? -1.0 + (1.0 / (-x + 1.0)) : x;
+
+  void _processSample(
+    double inL,
+    double inR,
+    double targetDelay,
+    double feedbackAmt,
+    double wet,
+    double dry,
+    Float32List outL,
+    Float32List outR,
+    int i,
+  ) {
+    _currentDelaySamples += (targetDelay - _currentDelaySamples) * _smoothCoeff;
+    var pos = _writeIndex - _currentDelaySamples;
+    if (pos < 0) pos += _delayBufferSize;
+    final i0 = pos.toInt();
+    final frac = pos - i0;
+    final i1 = i0 + 1 >= _delayBufferSize ? 0 : i0 + 1;
+
+    // Under one sample of delay there is nothing older to read but the input.
+    final dL = _currentDelaySamples < 1.0 ? inL : _delayBufferL[i0] + frac * (_delayBufferL[i1] - _delayBufferL[i0]);
+    final dR = _currentDelaySamples < 1.0 ? inR : _delayBufferR[i0] + frac * (_delayBufferR[i1] - _delayBufferR[i0]);
+    _delayBufferL[_writeIndex] = inL + softSaturate(dL * feedbackAmt);
+    _delayBufferR[_writeIndex] = inR + softSaturate(dR * feedbackAmt);
+    outL[i] = (inL * dry) + (dL * wet) + (dR * wet * 0.1);
+    outR[i] = (inR * dry) + (dR * wet) + (dL * wet * 0.1);
+    _writeIndex = (_writeIndex + 1) % _delayBufferSize;
   }
+
+  /// Process stereo audio block with parameters-driven echo that FAILS HARD
+  void processStereo(
+    Float32List inputL,
+    Float32List inputR, 
+    Float32List outputL,
+    Float32List outputR, 
+    EchoParameters parameters,
+  ) {
+    _validateBuffers(inputL, inputR, outputL, outputR);
+    final targetDelay = parameters.delayTime.clamp(0.0, 1.0) * _sampleRate;
+    _currentDelaySamples = _currentDelaySamples < 0 ? targetDelay : _currentDelaySamples;
+    final fb = parameters.feedback * 0.85;
+    final wet = parameters.bypass > 0.5 ? 0.0 : parameters.mix;
+    final dry = 1.0 - wet;
+
+    for (var i = 0; i < inputL.length; i++) {
+      _processSample(inputL[i], inputR[i], targetDelay, fb, wet, dry, outputL, outputR, i);
+    }
+
+  }
+
+  /// Unity gain up to a magnitude of 1, then a limit approaching 2. Value and
+  /// slope are both continuous at the threshold.
+  static double softSaturate(double x) => x > 1.0
+      ? 2.0 - 1.0 / x
+      : x < -1.0
+          ? -2.0 - 1.0 / x
+          : x;
 
   /// Reset delay buffers
   void reset() {
     _delayBufferL.fillRange(0, _delayBufferSize, 0.0);
     _delayBufferR.fillRange(0, _delayBufferSize, 0.0);
     _writeIndex = 0;
+    _currentDelaySamples = -1.0;
   }
 
   /// Dispose resources

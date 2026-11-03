@@ -1,81 +1,44 @@
-import 'dart:io';
 import 'dart:typed_data';
-import 'src/echo_processor.dart';
+import 'package:flutter_vst3/flutter_vst3.dart';
 import 'src/echo_parameters.dart';
+import 'src/echo_processor.dart';
 
-const CMD_INIT = 0x01;
-const CMD_PROCESS = 0x02;
-const CMD_SET_PARAM = 0x03;
-const CMD_TERMINATE = 0xFF;
+/// Adapts the Echo DSP engine and parameter state to match the interface
+/// expected by [runVst3SharedMemoryProcessor].
+final class _EchoProcessorWrapper implements Vst3WorkerProcessor {
+  final EchoProcessor _processor = EchoProcessor();
+  final EchoParameters _parameters = EchoParameters();
 
-void main() async {
-  final processor = EchoProcessor();
-  final parameters = EchoParameters();
-  
-  // CRITICAL: Set binary mode (only if stdin is a terminal)
-  try {
-    stdin.lineMode = false;
-  } catch (e) {
-    // Ignore error if stdin is not a terminal (e.g., when piped)
-  }
-  
-  // Main event loop
-  await for (final bytes in stdin) {
-    if (bytes.isEmpty) continue;
-    
-    final buffer = ByteData.view(Uint8List.fromList(bytes).buffer);
-    final command = buffer.getUint8(0);
-    
-    switch (command) {
-      case CMD_INIT:
-        final sampleRate = buffer.getFloat64(1, Endian.little);
-        processor.initialize(sampleRate, 512);
-        stdout.add([CMD_INIT]); // ACK
-        await stdout.flush();
-        break;
-        
-      case CMD_PROCESS:
-        final numSamples = buffer.getInt32(1, Endian.little);
-        // Read interleaved stereo
-        final audioData = Float32List(numSamples * 2);
-        for (int i = 0; i < numSamples * 2; i++) {
-          audioData[i] = buffer.getFloat32(5 + i * 4, Endian.little);
-        }
-        
-        // Split to L/R
-        final inputL = List<double>.generate(numSamples, 
-            (i) => audioData[i * 2].toDouble());
-        final inputR = List<double>.generate(numSamples, 
-            (i) => audioData[i * 2 + 1].toDouble());
-        
-        final outputL = List<double>.filled(numSamples, 0.0);
-        final outputR = List<double>.filled(numSamples, 0.0);
-        
-        // PROCESS WITH YOUR DART CODE!
-        processor.processStereo(inputL, inputR, outputL, outputR, parameters);
-        
-        // Send back interleaved
-        final response = ByteData(1 + numSamples * 8);
-        response.setUint8(0, CMD_PROCESS);
-        for (int i = 0; i < numSamples; i++) {
-          response.setFloat32(1 + i * 8, outputL[i], Endian.little);
-          response.setFloat32(1 + i * 8 + 4, outputR[i], Endian.little);
-        }
-        
-        stdout.add(response.buffer.asUint8List());
-        await stdout.flush();
-        break;
-        
-      case CMD_SET_PARAM:
-        final paramId = buffer.getInt32(1, Endian.little);
-        final value = buffer.getFloat64(5, Endian.little);
-        parameters.setParameter(paramId, value);
-        stdout.add([CMD_SET_PARAM]); // ACK
-        await stdout.flush();
-        break;
-        
-      case CMD_TERMINATE:
-        exit(0);
-    }
-  }
+  @override
+  void initialize(double sampleRate, int maxBlockSize) =>
+      _processor.initialize(sampleRate, maxBlockSize);
+
+  @override
+  void setParameter(int paramId, double value) =>
+      _parameters.setParameter(paramId, value);
+
+  @override
+  void processStereo(
+    Float32List inputL,
+    Float32List inputR,
+    Float32List outputL,
+    Float32List outputR,
+  ) =>
+      _processor.processStereo(inputL, inputR, outputL, outputR, _parameters);
+
+  @override
+  void reset() => _processor.reset();
+
+  @override
+  void dispose() => _processor.dispose();
+}
+
+
+/// Entry point for Echo processor executable.
+/// Uses preallocated zero-copy shared memory and POSIX semaphores.
+void main(List<String> args) {
+  runVst3SharedMemoryProcessor(
+    args: args,
+    processor: _EchoProcessorWrapper(),
+  );
 }

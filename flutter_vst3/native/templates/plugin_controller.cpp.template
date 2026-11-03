@@ -12,10 +12,33 @@
 using namespace Steinberg;
 using namespace Steinberg::Vst;
 
-// Controller for the {{PLUGIN_NAME}} plugin
-class {{PLUGIN_CLASS_NAME}}Controller : public EditController {
+
+#include "embedded_flutter_view.h"
+#include "view_logic.h"
+#include "vst3_plugin_state.h"
+#include "pluginterfaces/vst/ivstmessage.h"
+#include <cstring>
+#include <vector>
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
+
+/// EditController implementation for the {{PLUGIN_NAME}} VST3 plugin.
+/// Manages parameter definitions, state persistence, value formatting,
+/// and bidirectional synchronization with the active GUI view.
+class {{PLUGIN_CLASS_NAME}}Controller : public EditController, public flutter_vst3::ShmAddressSource {
 public:
     {{PLUGIN_CLASS_NAME}}Controller() = default;
+
+    /// Cleans up references to the active GUI view when the controller is destroyed.
+    ~{{PLUGIN_CLASS_NAME}}Controller() override {
+        if (activeView_) {
+            activeView_->onControllerClosed();
+            activeView_ = nullptr;
+        }
+    }
     
     tresult PLUGIN_API initialize(FUnknown* context) override {
         tresult result = EditController::initialize(context);
@@ -27,18 +50,66 @@ public:
         return kResultTrue;
     }
 
-    tresult PLUGIN_API setComponentState(IBStream* state) override {
-        if (!state) return kResultFalse;
-
-        // Read parameter values from processor state
-        for (int32 i = 0; i < {{PARAMETER_COUNT}}; ++i) {
-            double value = 0.0;
-            int32 bytesRead = 0;
-            if (state->read(&value, sizeof(value), &bytesRead) == kResultTrue) {
-                setParamNormalized(i, value);
-            }
+    /// Sets parameter value from DAW host and notifies the active native GUI view.
+    tresult PLUGIN_API setParamNormalized(ParamID id, ParamValue value) override {
+        tresult result = EditController::setParamNormalized(id, value);
+        if (activeView_ && editing_.shouldEcho(id)) {
+            activeView_->updateParameter(id, EditController::getParamNormalized(id));
         }
+        return result;
+    }
 
+
+    uintptr_t sharedMemoryAddress() const override { return shmAddress_; }
+
+    tresult PLUGIN_API notify(IMessage* message) override {
+        if (message && message->getMessageID() &&
+            std::strcmp(message->getMessageID(), "Vst3Shm") == 0) {
+            int64 address = 0, pid = 0;
+            auto* attributes = message->getAttributes();
+            const bool valid = attributes &&
+                attributes->getInt("address", address) == kResultTrue &&
+                attributes->getInt("pid", pid) == kResultTrue;
+#ifdef _WIN32
+            const auto current = GetCurrentProcessId();
+#else
+            const auto current = getpid();
+#endif
+            shmAddress_ = valid ? flutter_vst3::localShmAddress(address, pid, current) : 0;
+            return valid ? kResultTrue : kInvalidArgument;
+        }
+        return EditController::notify(message);
+    }
+
+    tresult PLUGIN_API beginEdit(ParamID id) override {
+        return editing_.begin(id) ? EditController::beginEdit(id) : kResultTrue;
+    }
+
+    bool isEditing(uint32_t id) const override { return !editing_.shouldEcho(id); }
+
+    /// The host requires every perform to sit between a begin and an end.
+    tresult PLUGIN_API performEdit(ParamID id, ParamValue value) override {
+        return editing_.shouldEcho(id) ? kResultFalse : EditController::performEdit(id, value);
+    }
+
+    void endOpenEdits() override {
+        for (auto id : editing_.takeOpen()) EditController::endEdit(id);
+    }
+
+    tresult PLUGIN_API endEdit(ParamID id) override {
+        return editing_.end(id) ? EditController::endEdit(id) : kResultFalse;
+    }
+
+    int32 PLUGIN_API getParameterCount() override {
+        return {{PARAMETER_COUNT}};
+    }
+
+    tresult PLUGIN_API setComponentState(IBStream* state) override {
+        std::vector<double> values;
+        if (!vst3ReadPluginState(state, {{PARAMETER_COUNT}}, values)) return kResultFalse;
+        for (int32 i = 0; i < {{PARAMETER_COUNT}}; ++i) {
+            setParamNormalized(i, values[static_cast<size_t>(i)]);
+        }
         return kResultTrue;
     }
 
@@ -49,38 +120,38 @@ public:
     tresult PLUGIN_API getState(IBStream* state) override {
         if (!state) return kResultFalse;
 
-        // Write current parameter values
         for (int32 i = 0; i < {{PARAMETER_COUNT}}; ++i) {
-            double value = getParamNormalized(i);
-            int32 bytesWritten = 0;
-            state->write(&value, sizeof(value), &bytesWritten);
+            if (!vst3WritePluginStateValue(state, getParamNormalized(i))) return kResultFalse;
         }
-
         return kResultTrue;
     }
 
     // Convert normalized parameter values to display strings
     tresult PLUGIN_API getParamStringByValue(ParamID id, ParamValue valueNormalized, String128 string) override {
 {{PARAMETER_TO_STRING}}
-        return EditController::getParamStringByValue(id, valueNormalized, string);
     }
 
     // Convert display strings to normalized parameter values  
     tresult PLUGIN_API getParamValueByString(ParamID id, TChar* string, ParamValue& valueNormalized) override {
 {{STRING_TO_PARAMETER}}
-        return EditController::getParamValueByString(id, string, valueNormalized);
     }
 
-    // Create view (UI) for the plugin - integrates with Flutter UI
+    /// Instantiates the native plugin GUI window and binds the activeView_ pointer.
     IPlugView* PLUGIN_API createView(FIDString name) override {
-        if (strcmp(name, ViewType::kEditor) == 0) {
-            // TODO: Return Flutter-based UI view
-            // For now, return nullptr to use generic host UI
-            return nullptr;
+        if (name && strcmp(name, ViewType::kEditor) == 0) {
+            return createEmbeddedFlutterView(this, "{{PLUGIN_NAME}}", &activeView_);
         }
         return nullptr;
     }
+
+private:
+    /// Tracks the active native GUI view to push parameter updates.
+    /// Cleared automatically by the view when the window is closed.
+    IEmbeddedFlutterView* activeView_{nullptr};
+    uintptr_t shmAddress_{0};
+    flutter_vst3::EditState editing_;
 };
+
 
 // Factory functions in proper namespace
 namespace Steinberg {

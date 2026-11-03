@@ -239,8 +239,11 @@ dart test
 ## Installation
 
 ```bash
-# Install to system VST3 folder
-make install
+# Add a Makefile to your plugin folder with these two lines
+#   PLUGIN ?= my_plugin
+#   include ../plugin.mk
+# Then build and copy it to the folder VST3 hosts scan
+make -C vsts/my_plugin deploy
 ```
 
 Your plugin is now ready to use in any VST® 3 host!
