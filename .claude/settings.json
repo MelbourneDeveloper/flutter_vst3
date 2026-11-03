@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "deny": [
+      "Agent",
+      "Task"
+    ]
+  },
+  "disableWorkflows": true,
+  "remoteControlAtStartup": true,
+  "autoMemoryEnabled": false
+}
