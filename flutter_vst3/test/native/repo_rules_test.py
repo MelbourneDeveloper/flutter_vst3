@@ -102,15 +102,16 @@ class RemovedDesignTests(unittest.TestCase):
 
 class AgentSetup(unittest.TestCase):
     def test_standard_make_targets_exist(self):
-        for target in ('lint', 'fmt', 'ci', 'setup', 'test', 'build', 'clean'):
+        for target in ('deslop', 'lint', 'fmt', 'ci', 'setup', 'test', 'build', 'clean'):
             result = subprocess.run(['make', '-n', target], cwd=ROOT, stdout=subprocess.PIPE,
                                     stderr=subprocess.STDOUT, text=True)
             self.assertEqual(0, result.returncode, target + ': ' + result.stdout)
             self.assertTrue(result.stdout.strip(), target + ' does nothing')
 
     def test_agent_files_point_at_one_canonical_file(self):
-        self.assertIn('CLAUDE.md', (ROOT / 'AGENTS.md').read_text())
-        self.assertLess(len((ROOT / 'AGENTS.md').read_text().splitlines()), 10, 'AGENTS.md is a pointer')
+        self.assertEqual('@AGENTS.md', (ROOT / 'CLAUDE.md').read_text().strip())
+        self.assertEqual('AGENTS.md', (ROOT / 'GEMINI.md').readlink().as_posix())
+        self.assertIn('make deslop', (ROOT / 'AGENTS.md').read_text())
 
 
 if __name__ == '__main__':

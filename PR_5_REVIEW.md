@@ -165,9 +165,9 @@ These parts are good and should stay: the `Float32List` migration, correct heade
 
 ## Decision for the maintainer
 
-`CLAUDE.md` says "Only native machine code. No AOT or Dart runtime!" and asks for FP style with no classes. This design ships
+The instructions said "Only native machine code. No AOT or Dart runtime!" and asks for FP style with no classes. This design ships
 a `dart compile exe` binary, which is AOT plus the Dart runtime, and the VST3 SDK requires classes. The fixes follow the
-existing design because no other in-process option exists today. Those rules should be reworded to match.
+existing design because no other in-process option exists today. `AGENTS.md` now words those rules to match.
 
 `aot:86-90,169-174` deliberately call `abort()` in the host when something fails. The repo says "FAIL HARD", but this takes
 down the user's whole DAW session and unsaved work. The fixes fail through the VST3 API instead: `setActive` returns an
@@ -318,8 +318,8 @@ Made without asking, on the owner's instruction to use judgment. Each can be rev
 | The editor checks for a new worker about once a second | A one-second delay in clearing the message doesn't matter | Change `_restartCheckTicks` |
 | A saved state with a bad value is rejected whole | Clamping would silently change a user's project | Clamp in `vst3ReadPluginState` |
 | No PR to `main` opened | The owner said not to open PRs, and hasn't changed that. **Nothing can merge until one exists** | Open one from this branch |
-| Light agentpmo means agent files and Makefile targets | "Light" rules out the rest of the standard: coverage thresholds, Dependabot, CodeQL, a release workflow, Deslop, the shipwright check and repo settings. None was applied, and `make test` doesn't enforce coverage | Run the `agent-pmo` skill for the full conversion |
-| `CLAUDE.md` stays canonical, with `AGENTS.md` a pointer | The spec keeps a substantial existing `CLAUDE.md` as canonical. `GEMINI.md` was already a symlink to it | Swap the two |
+| Light agentpmo means agent files, Makefile targets and the Deslop gate | "Light" rules out the rest of the standard: coverage thresholds, Dependabot, CodeQL, a release workflow, the shipwright check and repo settings. None was applied, and `make test` doesn't enforce coverage | Run the `agent-pmo` skill for the full conversion |
+| `AGENTS.md` is canonical, and `CLAUDE.md` and `GEMINI.md` point at it | The owner moved the instructions there | Swap them |
 | CI runs on pushes to `feature/**` as well as on PRs | The owner wanted proof on this branch before any PR exists | Remove the trigger before merging, as the standard is PR-only |
 
 ### Decisions

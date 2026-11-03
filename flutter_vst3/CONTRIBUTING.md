@@ -26,7 +26,7 @@ We encourage contributors to leverage modern AI development tools like [Claude C
 
 ## Code Style
 
-Follow the existing code patterns in the project. Refer to the [CLAUDE.md](../CLAUDE.md) file for coding guidelines.
+Follow the existing code patterns in the project. Refer to the [AGENTS.md](../AGENTS.md) file for coding guidelines.
 
 ## Questions?
 

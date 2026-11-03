@@ -1,0 +1,40 @@
+# Deslop configuration for flutter_vst3.
+#
+# `report_hide` keeps these files in analysis (so "hand-written code duplicates
+# a hidden file" is still detectable) but drops clusters whose every occurrence
+# is hidden from the actionable report. We use it for the real-time audio and
+# FFI-marshalling hot paths: their structural similarity is intrinsic to DSP /
+# native-interop code, and extracting "shared" helpers would add per-sample or
+# per-block indirection (closures, virtual dispatch, cross-package coupling) on
+# the audio thread — a performance cost we refuse to pay. Built-in generated/
+# build excludes still apply; project config only extends them.
+
+# Measured 6.69% with Deslop 0.38.0 (350/5234 LOC). This ceiling only goes down.
+[threshold]
+max_duplication_percent = 6.7
+
+[defaults]
+report_hide = [
+  # Freeverb DSP run per-sample in the audio callback. CombFilter.process and
+  # AllpassFilter.process share a read-buffer / advance-index / return shape but
+  # are distinct algorithms (comb has dampening + feedback state; allpass is
+  # -input + bufout). Merging them onto a shared base would cost a virtual call
+  # per sample inside the inner processStereo loop.
+  "vsts/flutter_reverb/lib/src/reverb_processor.dart",
+
+  # FFI buffer marshalling: malloc + copy-in + native call + copy-out per audio
+  # block. The two near-identical copies (process / processStereoF32) live in
+  # separate packages (dart_vst_graph, dart_vst_host); unifying them would
+  # couple the packages and add an indirection layer on the buffer path.
+  "dart_vst_graph/lib/src/bindings.dart",
+  "dart_vst_host/lib/src/host.dart",
+
+  # Per-audio-block IPC marshalling in the native-compiled processor entry
+  # points: the cmdProcess case decodes an interleaved Float32 buffer, calls
+  # processStereo, and re-encodes the response on every block. The reverb and
+  # echo copies are structurally alike but belong to separate self-contained
+  # plugin packages; sharing this loop would couple the packages and add
+  # indirection on the per-block decode/encode path.
+  "vsts/flutter_reverb/lib/flutter_reverb_processor_exe.dart",
+  "vsts/echo/lib/echo_processor_exe.dart",
+]

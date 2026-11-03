@@ -16,6 +16,16 @@ env:
   VST3_SDK_TAG: v3.8.1_build_84
 
 jobs:
+  duplication:
+    name: Deslop duplication gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Nimblesite/Deslop@v0.38.0
+        with:
+          nohtml: true
+          upload-artifact: false
+
   flutter-vst3:
     name: flutter_vst3 analyze and test
     runs-on: ubuntu-latest
@@ -245,6 +255,7 @@ jobs:
     name: CI
     if: always()
     needs:
+      - duplication
       - flutter-vst3
       - plugin-tests
       - ipc
