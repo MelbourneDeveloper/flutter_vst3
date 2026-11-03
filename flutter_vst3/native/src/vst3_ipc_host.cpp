@@ -113,6 +113,9 @@ void Vst3IpcHost::waitForWorker(int timeoutMs) {
             throw std::runtime_error("Dart worker exited: " + workerPath_);
         }
     }
+    // The worker may still post done after this throw; marking it busy keeps
+    // that late post from answering a later handshake.
+    workerBusy_ = true;
     throw std::runtime_error("Dart worker timed out: " + workerPath_);
 }
 

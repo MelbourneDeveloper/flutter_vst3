@@ -6,9 +6,9 @@
 #include <algorithm>
 #include <vector>
 #include <cmath>
+#include <cstdio>
 #include <memory>
 #include <functional>
-#include <stdexcept>
 #include <optional>
 #include <variant>
 #include <unordered_map>
@@ -225,8 +225,10 @@ private:
         size_.reset();
         const int count = controller_ ? controller_->getParameterCount() : 0;
         const int height = (std::max)(280, 74 + count * 56 + 36);
-        if (!winHost_.init((HWND)parentView_, controller_, pluginName_, 540, height))
-            throw std::runtime_error("Native Windows editor failed after Flutter startup failure");
+        if (!winHost_.init((HWND)parentView_, controller_, pluginName_, 540, height)) {
+            fprintf(stderr, "flutter_vst3: native Windows editor failed after Flutter startup failure.\n");
+            return;
+        }
         ViewRect rect(0, 0, 540, height);
         if (frame_) frame_->resizeView(this, &rect);
     }
@@ -237,8 +239,7 @@ private:
         size_.reset();
         const int count = controller_ ? controller_->getParameterCount() : 0;
         const int height = (std::max)(280, 74 + count * 56 + 36);
-        if (!linuxNativeHost_.init(parentView_, controller_, pluginName_, 540, height))
-            throw std::runtime_error("Native Linux editor failed after Flutter startup failure");
+        if (!linuxNativeHost_.init(parentView_, controller_, pluginName_, 540, height)) return;
         ViewRect rect(0, 0, 540, height);
         if (frame_) frame_->resizeView(this, &rect);
     }

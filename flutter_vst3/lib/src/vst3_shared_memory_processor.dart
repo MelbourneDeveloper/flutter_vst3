@@ -22,6 +22,8 @@ typedef _SemPostC = Int32 Function(Pointer<Void>);
 typedef _SemPostDart = int Function(Pointer<Void>);
 typedef _SemCloseC = Int32 Function(Pointer<Void>);
 typedef _SemCloseDart = int Function(Pointer<Void>);
+typedef _ErrnoLocationC = Pointer<Int32> Function();
+typedef _ErrnoLocationDart = Pointer<Int32> Function();
 
 /// POSIX FFI bindings for inter-process shared memory and semaphores.
 final class _PosixNative {
@@ -33,6 +35,7 @@ final class _PosixNative {
   final _SemWaitDart semWait;
   final _SemPostDart semPost;
   final _SemCloseDart semClose;
+  final _ErrnoLocationDart errnoLocation;
 
   _PosixNative(DynamicLibrary lib)
       : shmOpen = lib.lookupFunction<_ShmOpenC, _ShmOpenDart>('shm_open'),
@@ -42,7 +45,28 @@ final class _PosixNative {
         semOpen = lib.lookupFunction<_SemOpenC, _SemOpenDart>('sem_open'),
         semWait = lib.lookupFunction<_SemWaitC, _SemWaitDart>('sem_wait'),
         semPost = lib.lookupFunction<_SemPostC, _SemPostDart>('sem_post'),
-        semClose = lib.lookupFunction<_SemCloseC, _SemCloseDart>('sem_close');
+        semClose = lib.lookupFunction<_SemCloseC, _SemCloseDart>('sem_close'),
+        errnoLocation = lib.lookupFunction<_ErrnoLocationC, _ErrnoLocationDart>(
+            Platform.isMacOS ? '__error' : '__errno_location');
+}
+
+/// errno when a signal interrupts sem_wait before it takes the semaphore.
+const int vst3SemWaitEintr = 4;
+
+/// Runs [semWait] until it takes the semaphore. Returning after EINTR would
+/// re-run the previous command and post an extra done [IPC-SYNC-HANDOFF]. Any
+/// other failure throws.
+void retryOnSemEintr(int Function() semWait, int Function() errno) {
+  var result = semWait();
+  while (result != 0) {
+    final int code = errno();
+    switch (code) {
+      case vst3SemWaitEintr:
+        result = semWait();
+      default:
+        throw StateError('sem_wait failed with errno $code');
+    }
+  }
 }
 
 /// Library providing the POSIX IPC symbols. Before glibc 2.34 they live outside
@@ -67,7 +91,10 @@ final class _PosixIpc implements Vst3Ipc {
   Pointer<Void> get pointer => _ptr;
 
   @override
-  void waitReady() => _native.semWait(_semReady);
+  void waitReady() => retryOnSemEintr(
+        () => _native.semWait(_semReady),
+        () => _native.errnoLocation().value,
+      );
 
   @override
   void signalDone() => _native.semPost(_semDone);

@@ -2,6 +2,8 @@
 
 #include "ipc_test_support.h"
 
+#include <filesystem>
+
 namespace {
 
 /// B1: a late block must not desynchronize any later block.
@@ -120,6 +122,52 @@ void testPartlyLateBlockIsWhollySilent() {
     }
 }
 
+/// [IPC-TIMEOUT-LATE-BLOCK] [IPC-SYNC-HANDOFF]: a control command that
+/// outlives its 5 s wait must leave the worker marked busy, so its late done
+/// is discarded instead of answering a later activation, whose blocks would
+/// then race the worker for the buffers.
+void testControlTimeoutKeepsHandshakeInSync() {
+    constexpr int kParamInitStallMs = 6;
+    Vst3IpcHost host(gWorker, kParamInitStallMs + 1);
+    host.configure(48000.0, 64, true);
+    host.setParameter(kParamInitStallMs, 7000);  // CONFIGURE takes 7 s against a 5 s wait.
+    Block arm(64);
+    check(arm.render(host), "arming block was late");
+    bool threw = false;
+    try {
+        host.configure(48000.0, 64, true);
+    } catch (const std::runtime_error&) {
+        threw = true;
+    }
+    check(threw, "a control command over 5 s must time out");
+    host.configure(48000.0, 64, true);
+    for (int i = 0; i < 20; ++i) {
+        const float value = 0.01f * static_cast<float>(i + 1);
+        Block block(64, value);
+        check(block.render(host), "block after a control timeout was late");
+        checkNear(block.outL[0], value * 2.0, "block returned its own output, not a stale one");
+    }
+}
+
+/// [PROCESS-WORKER-LAUNCH]: a plugin installed under a user folder whose name
+/// the ANSI code page can't express still starts its worker.
+void testWorkerStartsFromNonAnsiPath() {
+    namespace fs = std::filesystem;
+    const fs::path dir = fs::temp_directory_path() / fs::u8path("flutter_vst3 \xE6\x97\xA5\xE6\x9C\xAC\xE8\xAA\x9E");
+    fs::remove_all(dir);
+    fs::create_directories(dir);
+    const fs::path worker = dir / fs::u8path(gWorker).filename();
+    fs::copy_file(fs::u8path(gWorker), worker);
+    {
+        Vst3IpcHost host(worker.u8string(), kParamCount);
+        host.configure(48000.0, 64, true);
+        Block block(64, 0.25f);
+        check(block.render(host), "block from a non-ANSI worker path was late");
+        checkNear(block.outL[0], 0.5, "worker at a non-ANSI path processes audio");
+    }
+    fs::remove_all(dir);
+}
+
 /// Worker crashes must not cost the host anything: each restart works, and no
 /// process handles build up.
 void testCrashCyclesLeakNothing() {
@@ -162,6 +210,8 @@ IpcTests recoveryTests() {
         {"B8 dead worker is bounded", testDeadWorkerIsBounded},
         {"DSP exception is detected", testDspExceptionIsDetected},
         {"partly late block is wholly silent", testPartlyLateBlockIsWhollySilent},
+        {"control timeout keeps handshake in sync", testControlTimeoutKeepsHandshakeInSync},
+        {"worker starts from a non-ANSI path", testWorkerStartsFromNonAnsiPath},
         {"crash cycles leak nothing", testCrashCyclesLeakNothing},
     };
 }

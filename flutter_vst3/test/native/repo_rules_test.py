@@ -84,6 +84,7 @@ class RemovedDesignTests(unittest.TestCase):
     def test_M15_only_allowlisted_error_prints(self):
         allowed = {
             'std::fprintf(stderr, "{{PLUGIN_ID}}: %s\\n", error.what());',
+            'fprintf(stderr, "flutter_vst3: native Windows editor failed after Flutter startup failure.\\n");',
             'fprintf(stderr, "flutter_vst3: gtk_plug_new failed. VST3 GUI embedding on Linux requires an X11 backend (GDK_BACKEND=x11).\\n");',
             'NSLog(@"[flutter_vst3] Flutter app library failed to load: %s", dlerror());',
             'NSLog(@"[flutter_vst3] Flutter UI mount exception: %@. Falling back to Cocoa.", e);',
@@ -95,6 +96,20 @@ class RemovedDesignTests(unittest.TestCase):
                     for line in path.read_text().splitlines():
                         if re.search(r'(?<![\w])(?:printf|fprintf|NSLog)\s*\(|std::(?:cout|cerr)', line):
                             self.assertIn(line.strip(), allowed, str(path))
+
+    def test_editor_fallbacks_never_throw_from_os_callbacks(self):
+        view = (ROOT / 'flutter_vst3/native/src/embedded_flutter_view.cpp').read_text()
+        for mounter in ('void mountNativeWindows', 'void mountNativeLinux'):
+            body = re.search(re.escape(mounter) + r'.*?\n    }\n', view, re.S).group(0)
+            self.assertNotIn('throw', body, mounter)
+
+    def test_editor_runs_the_declared_entrypoint(self):
+        native = ROOT / 'flutter_vst3/native/src'
+        self.assertIn('runWithEntrypoint:', (native / 'embedded_flutter_view.mm').read_text())
+        self.assertIn('@VST3_FLUTTER_ENTRYPOINT', (native / 'embedded_flutter_view.mm').read_text())
+        self.assertIn('FlutterDesktopEngineRun(sSharedEngine, VST3_FLUTTER_ENTRYPOINT)',
+                      (native / 'embedded_flutter_view_win_flutter.inc').read_text())
+        self.assertIn('void main() => echoMain();', (ROOT / 'vsts/echo/lib/main.dart').read_text())
 
     def test_M18_block_automation_documented(self):
         self.assertIn('Parameters apply per block, so only the last point in each queue is used.',

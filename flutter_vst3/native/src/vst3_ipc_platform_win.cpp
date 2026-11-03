@@ -17,6 +17,25 @@ namespace {
 
 void moduleAnchor() {}
 
+constexpr DWORD kLongestWindowsPath = 32768;
+
+std::wstring widened(const std::string& utf8) {
+    const int size = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, utf8.data(),
+                                         static_cast<int>(utf8.size()), nullptr, 0);
+    if (size == 0 && !utf8.empty()) throw std::runtime_error("Path is not valid UTF-8: " + utf8);
+    std::wstring wide(static_cast<size_t>(size), L'\0');
+    MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, utf8.data(), static_cast<int>(utf8.size()),
+                        wide.data(), size);
+    return wide;
+}
+
+std::string narrowed(const wchar_t* wide, int length) {
+    const int size = WideCharToMultiByte(CP_UTF8, 0, wide, length, nullptr, 0, nullptr, nullptr);
+    std::string utf8(static_cast<size_t>(size), '\0');
+    WideCharToMultiByte(CP_UTF8, 0, wide, length, utf8.data(), size, nullptr, nullptr);
+    return utf8;
+}
+
 Vst3SharedMemory* mapNew(const std::string& name, void*& handle) {
     HANDLE mapping = CreateFileMappingA(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0,
                                         VST3_SHM_TOTAL_SIZE, name.c_str());
@@ -86,12 +105,13 @@ intptr_t spawnWorker(const std::string& path, const std::string& shm, const std:
                      const std::string& done) {
     const std::string cmd = "\"" + path + "\" \"" + shm + "\" \"" + ready + "\" \"" + done + "\" " +
                             std::to_string(currentProcessId());
-    std::vector<char> buffer(cmd.begin(), cmd.end());
-    buffer.push_back('\0');
-    STARTUPINFOA startup{};
+    const std::wstring wide = widened(cmd);
+    std::vector<wchar_t> buffer(wide.begin(), wide.end());
+    buffer.push_back(L'\0');
+    STARTUPINFOW startup{};
     startup.cb = sizeof(startup);
     PROCESS_INFORMATION info{};
-    if (!CreateProcessA(nullptr, buffer.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr,
+    if (!CreateProcessW(nullptr, buffer.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr,
                         nullptr, &startup, &info)) {
         throw std::runtime_error("Failed to start Dart worker: " + path);
     }
@@ -118,13 +138,16 @@ int64_t childPid(intptr_t child) noexcept {
 
 std::string modulePath() {
     HMODULE module = nullptr;
-    char path[MAX_PATH];
-    if (!GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                            reinterpret_cast<LPCSTR>(&moduleAnchor), &module) ||
-        GetModuleFileNameA(module, path, sizeof(path)) == 0) {
+    std::vector<wchar_t> path(kLongestWindowsPath);
+    const DWORD length =
+        GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           reinterpret_cast<LPCWSTR>(&moduleAnchor), &module)
+            ? GetModuleFileNameW(module, path.data(), kLongestWindowsPath)
+            : 0;
+    if (length == 0 || length == kLongestWindowsPath) {
         throw std::runtime_error("Failed to locate the VST3 module");
     }
-    return path;
+    return narrowed(path.data(), static_cast<int>(length));
 }
 
 }  // namespace vst3_ipc

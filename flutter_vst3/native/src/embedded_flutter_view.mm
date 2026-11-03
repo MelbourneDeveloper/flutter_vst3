@@ -183,19 +183,7 @@ private:
     void cleanup() {
         alive_->store(false);
         if (cocoaDelegate_) cocoaDelegate_.controller = nullptr;
-        if (flutterChannel_) {
-            [flutterChannel_ performSelector:sel_registerName("setMethodCallHandler:") withObject:nil];
-            flutterChannel_ = nil;
-        }
-        if (flutterViewController_) {
-            id engine = [flutterViewController_ performSelector:sel_registerName("engine")];
-            NSView* v = [flutterViewController_ performSelector:sel_registerName("view")];
-            [v removeFromSuperview];
-            if (engine) {
-                ((void (*)(id, SEL))objc_msgSend)(engine, sel_registerName("shutDownEngine"));
-            }
-            flutterViewController_ = nil;
-        }
+        teardownFlutterView();
         if (cocoaContainerView_) {
             [cocoaContainerView_ removeFromSuperview];
             cocoaContainerView_ = nil;
@@ -228,51 +216,78 @@ private:
         }
     }
 
+    /// Removes the Flutter channel, subview and engine; a no-op when the
+    /// Flutter editor never mounted.
+    void teardownFlutterView() {
+        if (flutterChannel_) {
+            [flutterChannel_ performSelector:sel_registerName("setMethodCallHandler:") withObject:nil];
+            flutterChannel_ = nil;
+        }
+        NSView* v = flutterViewController_ ? [flutterViewController_ performSelector:sel_registerName("view")] : nil;
+        [v removeFromSuperview];
+        flutterViewController_ = nil;
+        if (flutterEngine_) {
+            ((void (*)(id, SEL))objc_msgSend)(flutterEngine_, sel_registerName("shutDownEngine"));
+            flutterEngine_ = nil;
+        }
+    }
+
     BOOL tryMountFlutter(NSView* parent) {
         NSBundle *flBundle = nil, *appBundle = nil;
         if (!loadFlutterFrameworks(findPluginBundlePath(), &flBundle, &appBundle)) return NO;
         if (!appLibraryLoads(appBundle)) return NO;
         Class projCls = NSClassFromString(@"FlutterDartProject");
         Class vcCls = NSClassFromString(@"FlutterViewController");
-        if (!projCls || !vcCls) return NO;
+        Class engineCls = NSClassFromString(@"FlutterEngine");
+        if (!projCls || !vcCls || !engineCls) return NO;
 
         id proj = [[projCls alloc] performSelector:sel_registerName("initWithPrecompiledDartBundle:") withObject:appBundle];
-        flutterViewController_ = [[vcCls alloc] performSelector:sel_registerName("initWithProject:") withObject:proj];
-        if (!flutterViewController_) return NO;
+        if (!createFlutterStack(engineCls, vcCls, proj)) {
+            NSLog(@"[flutter_vst3] FlutterEngine failed to launch (e.g. Dart SDK hash mismatch). Falling back to Cocoa.");
+            teardownFlutterView();
+            return NO;
+        }
 
         setupMethodChannel();
+        return embedFlutterView(parent);
+    }
+
+    /// Builds the engine and its view controller, then runs the plugin's
+    /// declared entrypoint; the controller's implicit engine would run Dart's
+    /// default main. [EDITOR-ENTRYPOINT]
+    BOOL createFlutterStack(Class engineCls, Class vcCls, id proj) {
+        SEL engineInit = sel_registerName("initWithName:project:allowHeadlessExecution:");
+        flutterEngine_ = ((id (*)(id, SEL, id, id, BOOL))objc_msgSend)([engineCls alloc], engineInit, @"flutter_vst3", proj, NO);
+        return wrapEngineInViewController(vcCls) && runEngineWithEntrypoint();
+    }
+
+    BOOL runEngineWithEntrypoint() {
+#ifndef VST3_FLUTTER_ENTRYPOINT
+        return NO;
+#else
+        return ((BOOL (*)(id, SEL, id))objc_msgSend)(
+            flutterEngine_, sel_registerName("runWithEntrypoint:"), @VST3_FLUTTER_ENTRYPOINT);
+#endif
+    }
+
+    BOOL wrapEngineInViewController(Class vcCls) {
+        SEL init = sel_registerName("initWithEngine:nibName:bundle:");
+        flutterViewController_ = ((id (*)(id, SEL, id, id, id))objc_msgSend)([vcCls alloc], init, flutterEngine_, nil, nil);
+        return flutterViewController_ != nil;
+    }
+
+    BOOL embedFlutterView(NSView* parent) {
         NSView* fv = [flutterViewController_ performSelector:sel_registerName("view")];
         NSRect b = parent.bounds;
         if (b.size.width <= 0 || b.size.height <= 0) b = NSMakeRect(0, 0, 600, 650);
         [fv setFrame:b];
         [fv setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
         [parent addSubview:fv];
-
-        id engine = [flutterViewController_ performSelector:sel_registerName("engine")];
-        BOOL isRunning = engine
-            ? ((BOOL (*)(id, SEL))objc_msgSend)(engine, sel_registerName("running"))
-            : NO;
-        if (!isRunning && [flutterViewController_ respondsToSelector:sel_registerName("launchEngine")]) {
-            isRunning = ((BOOL (*)(id, SEL))objc_msgSend)(
-                flutterViewController_, sel_registerName("launchEngine"));
-        }
-        if (!isRunning) {
-            NSLog(@"[flutter_vst3] FlutterEngine failed to launch (e.g. Dart SDK hash mismatch). Falling back to Cocoa.");
-            [fv removeFromSuperview];
-            if (flutterChannel_) {
-                [flutterChannel_ performSelector:sel_registerName("setMethodCallHandler:") withObject:nil];
-                flutterChannel_ = nil;
-            }
-            if (engine) ((void (*)(id, SEL))objc_msgSend)(engine, sel_registerName("shutDownEngine"));
-            flutterViewController_ = nil;
-            return NO;
-        }
         return YES;
     }
 
     void setupMethodChannel() {
-        id engine = [flutterViewController_ performSelector:sel_registerName("engine")];
-        id messenger = [engine performSelector:sel_registerName("binaryMessenger")];
+        id messenger = [flutterEngine_ performSelector:sel_registerName("binaryMessenger")];
         Class chanCls = NSClassFromString(@"FlutterMethodChannel");
         flutterChannel_ = [chanCls performSelector:sel_registerName("methodChannelWithName:binaryMessenger:")
                                         withObject:@"flutter_vst3/parameters"
@@ -343,6 +358,7 @@ private:
     static inline EmbeddedFlutterView* sOwner{nullptr};
     BOOL hasFlutter_{NO};
     id flutterViewController_{nil};
+    id flutterEngine_{nil};
     id flutterChannel_{nil};
     NSView* cocoaContainerView_{nil};
     Vst3PluginEditorDelegate* cocoaDelegate_{nil};

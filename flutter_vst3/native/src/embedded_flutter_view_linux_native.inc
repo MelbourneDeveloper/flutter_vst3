@@ -37,7 +37,10 @@ public:
     void mount() {
         if (!parentWindow) return;
         plug = gtk_plug_new((Window)(uintptr_t)parentWindow);
-        if (!plug) return;
+        if (!plug) {
+            fprintf(stderr, "flutter_vst3: gtk_plug_new failed. VST3 GUI embedding on Linux requires an X11 backend (GDK_BACKEND=x11).\n");
+            return;
+        }
 
         gtk_widget_set_size_request(plug, width, height);
         gtk_style_context_add_class(gtk_widget_get_style_context(plug), "vst3-native-editor");

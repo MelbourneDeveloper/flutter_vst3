@@ -190,6 +190,10 @@ Code: flutter_vst3/native/src/embedded_flutter_view_linux_flutter.inc:35; flutte
 On macOS the Flutter app MUST be considered present only when `Contents/Frameworks` holds `App.framework/App`, `App.framework/Resources/flutter_assets` and `FlutterMacOS.framework/Resources/icudtl.dat`, and the build MUST define `VST3_FLUTTER_ENTRYPOINT`. Otherwise the view MUST mount the Cocoa fallback without attempting to load any framework.
 Code: flutter_vst3/native/src/embedded_flutter_view.mm:36 · Test: none
 
+### [EDITOR-ENTRYPOINT]
+macOS and Windows MUST start the Dart function named by `flutterEntrypoint`. The Linux embedder has no public API to name one and always runs `main`, so a plugin's `main` MUST call its `flutterEntrypoint`.
+Code: flutter_vst3/native/src/embedded_flutter_view.mm; flutter_vst3/native/src/embedded_flutter_view_win_flutter.inc:145 · Test: flutter_vst3/test/native/repo_rules_test.py
+
 ### [EDITOR-CORRUPT-APP-COCOA]
 macOS MUST `dlopen` the App framework executable and reject it before constructing a view, because a corrupt app library crashes the host. A mount exception or an engine that will not run MUST remove the subview, shut the engine down, nil the channel and fall back to the Cocoa sliders.
 Code: flutter_vst3/native/src/embedded_flutter_view.mm:66 · Test: flutter_vst3/test/native/editor_host_test.cpp

@@ -28,6 +28,27 @@ class _Processor implements Vst3WorkerProcessor {
 }
 
 void main() {
+  test('an interrupted ready wait restarts, any other failure throws '
+      '[IPC-SYNC-HANDOFF]', () {
+    for (final interruptions in [0, 1, 2, 50]) {
+      var waits = 0;
+      retryOnSemEintr(
+          () => ++waits <= interruptions ? -1 : 0, () => vst3SemWaitEintr);
+      expect(waits, interruptions + 1);
+    }
+    for (final errno in [22, 5, 1]) {
+      var waits = 0;
+      expect(
+          () => retryOnSemEintr(() {
+                waits++;
+                return -1;
+              }, () => errno),
+          throwsA(isA<StateError>()
+              .having((e) => e.message, 'message', contains('errno $errno'))));
+      expect(waits, 1);
+    }
+  });
+
   test('parameter ring crosses uint32 wrap and writes read index', () async {
     final port = ReceivePort();
     final isolate = await Isolate.spawn(_wrapProbe, port.sendPort);
