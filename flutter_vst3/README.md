@@ -33,26 +33,43 @@ The guide covers everything you need to build your first VST® 3 plugin:
 
 ## API Reference
 
-### VST3Processor
+### DSP worker
 
-Base class for all Dart VST® 3 processors:
+DSP runs in a compiled Dart worker process, one per plugin instance. Implement
+`Vst3WorkerProcessor` for your DSP and pass it to
+`runVst3SharedMemoryProcessor` from a headless `<plugin>_processor_exe.dart`
+entry point; the build compiles that file with `dart compile exe` and the VST3
+module exchanges audio and parameters with it over shared memory:
 
 ```dart
-abstract class VST3Processor {
-  void initialize(double sampleRate, int maxBlockSize);
-  void processStereo(List<double> inputL, List<double> inputR,
-                    List<double> outputL, List<double> outputR);
-  void setParameter(int paramId, double normalizedValue);
-  double getParameter(int paramId);
-  int getParameterCount();
-  void reset();
-  void dispose();
+import 'dart:typed_data';
+import 'package:flutter_vst3/flutter_vst3.dart';
+
+final class MyProcessor implements Vst3WorkerProcessor {
+  @override
+  void initialize(double sampleRate, int maxBlockSize) {}
+
+  @override
+  void setParameter(int paramId, double value) {}
+
+  @override
+  void processStereo(Float32List inputL, Float32List inputR,
+      Float32List outputL, Float32List outputR) {}
+
+  @override
+  void reset() {}
+
+  @override
+  void dispose() {}
+}
+
+void main(List<String> args) {
+  runVst3SharedMemoryProcessor(args: args, processor: MyProcessor());
 }
 ```
 
-### Audio worker
-
-Use Vst3SharedMemoryProcessor in a headless Dart executable.
+See [create_plugin_guide.md](create_plugin_guide.md) and the example plugins in
+[`vsts/`](https://github.com/MelbourneDeveloper/flutter_vst3/tree/main/vsts).
 
 ## Examples
 

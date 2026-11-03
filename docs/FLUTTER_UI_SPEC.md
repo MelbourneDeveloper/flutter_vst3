@@ -387,7 +387,6 @@ Where the code falls short of this design or lacks a test. Nothing here is fixed
 - `dspStopped` is not cleared by `onHostDetached` (`parameter_binding.dart:58`), so the "DSP stopped" message would persist through a detach; no test covers detach while stopped.
 - The "DSP stopped" text exists only in the Echo example UI; `flutter_vst3` itself ships no widget or message for it, so the requirement is example-level, not library-level.
 - The generator emits `{{GET_PARAMETER_INFO}}`, `{{PARAMETER_STATE_SAVE}}`, `{{PARAMETER_STATE_LOAD}}`, `{{NORMALIZE_PARAMETER}}` and `{{DENORMALIZE_PARAMETER}}` snippets that no template consumes, so per-parameter min/max and Dart-side text conversion never reach C++; parameter text uses the SDK `EditController` defaults (generate_plugin.dart:128-173 versus native/templates).
-- `VST3ParameterHandler` and `VST3ParameterInfo` are exported from `flutter_vst3.dart` but nothing in the bridge, generator or plugins uses them.
 - Host automation values are stored and forwarded to the worker without the finite/0..1 check that saved state gets, so an out-of-range automation value reaches the DSP (plugin_processor_aot.cpp.template:159).
 - The state reader never checks for trailing bytes, so a stream holding more than the parameter count is accepted (vst3_plugin_state.h:14); no test covers this.
 - No test asserts that closing an editor leaves the worker running; `immediateClose` only checks that a closing editor does not change a parameter value (editor_host_regressions.h:51).

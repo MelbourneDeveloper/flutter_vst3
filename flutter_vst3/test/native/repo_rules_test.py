@@ -23,6 +23,17 @@ class RemovedDesignTests(unittest.TestCase):
     def test_M2_dead_processor_removed(self):
         self.assertNotIn('VST3AudioProcessor', text('flutter_vst3/lib/src/parameter_binding.dart'))
 
+    def test_dead_parallel_api_removed(self):
+        for path in ('flutter_vst3/lib/src/flutter_vst3_bridge.dart',
+                     'flutter_vst3/lib/src/flutter_vst3_callbacks.dart',
+                     'flutter_vst3/lib/src/flutter_vst3_parameters.dart',
+                     'vsts/echo/lib/src/echo_bridge.dart',
+                     'vsts/echo/lib/src/echo_plugin.dart',
+                     'vsts/echo/lib/src/echo_vst3_processor.dart'):
+            self.assertFalse((ROOT / path).exists(), path)
+        for path in ('README.md', 'flutter_vst3/README.md', 'flutter_vst3/example/README.md'):
+            self.assertNotRegex(text(path), r'\bVST3Processor\b|VST3Bridge\.', path)
+
     def test_M3_waveform_work_removed(self):
         self.assertNotIn('waveformBuffer', text('vsts/echo/lib/src/echo_processor.dart'))
 
@@ -108,6 +119,21 @@ class AgentSetup(unittest.TestCase):
                                     stderr=subprocess.STDOUT, text=True)
             self.assertEqual(0, result.returncode, target + ': ' + result.stdout)
             self.assertTrue(result.stdout.strip(), target + ' does nothing')
+
+    def test_deslop_gates_the_pipeline(self):
+        ci = (ROOT / '.github/workflows/ci.yml').read_text()
+        analyze = ci[ci.index('\n  analyze:'):ci.index('\n  build:')]
+        config = (ROOT / '.deslop.toml').read_text()
+        ceiling = float(re.search(r'^max_duplication_percent = ([\d.]+)$', config, re.M).group(1))
+        self.assertLessEqual(ceiling, 6.0)
+        self.assertIn('uses: Nimblesite/Deslop@', analyze)
+        for bypass in ('fail-over', 'continue-on-error', 'only-changed', 'config:'):
+            self.assertNotIn(bypass, analyze)
+        self.assertRegex(ci, r'name: CI\n\s+if: always\(\)\n\s+needs:\n\s+- analyze\n')
+        self.assertRegex((ROOT / 'Makefile').read_text(), r'(?m)^ci: deslop ')
+        hidden = re.search(r'report_hide = \[(.*?)\n\]', config, re.S).group(1)
+        self.assertEqual(len(re.findall(r'^\s+"', hidden, re.M)), 5)
+        self.assertNotRegex(config, r'(?m)^\s*exclude\s*=')
 
     def test_agent_files_point_at_one_canonical_file(self):
         self.assertEqual('@AGENTS.md', (ROOT / 'CLAUDE.md').read_text().strip())

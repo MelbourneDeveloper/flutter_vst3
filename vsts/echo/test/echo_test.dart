@@ -2,7 +2,6 @@ import 'dart:typed_data';
 import 'package:test/test.dart';
 import 'package:echo/src/echo_processor.dart';
 import 'package:echo/src/echo_parameters.dart';
-import 'package:echo/src/echo_plugin.dart';
 
 void main() {
   group('EchoProcessor', () {
@@ -96,59 +95,6 @@ void main() {
 
       expect(output, everyElement(0.0));
       expect(output2, everyElement(0.0));
-    });
-  });
-
-  group('DartEchoPlugin', () {
-    test('initializes correctly', () {
-      final plugin = DartEchoPlugin();
-      expect(plugin.initialize(), isTrue);
-    });
-
-    test('has correct plugin info', () {
-      final plugin = DartEchoPlugin();
-      final info = plugin.pluginInfo;
-
-      expect(info['name'], equals('Echo'));
-      expect(info['vendor'], equals('CF'));
-      expect(info['inputs'], equals(2));
-      expect(info['outputs'], equals(2));
-      expect(info['parameters'], equals(4)); // Now has 4 parameters
-    });
-
-    test('can process audio without crashing', () {
-      final plugin = DartEchoPlugin();
-      plugin.initialize();
-      plugin.setupProcessing(44100.0, 512);
-      plugin.setActive(true);
-
-      final inputs = [
-        Float32List(128)..fillRange(0, 128, 0.5),
-        Float32List(128)..fillRange(0, 128, 0.3),
-      ];
-      final outputs = [
-        Float32List(128),
-        Float32List(128),
-      ];
-
-      plugin.processAudio(inputs, outputs);
-
-      // Should produce some output
-      expect(outputs[0], everyElement(0.25));
-      expect(outputs[1], everyElement(closeTo(0.15, 1e-8)));
-    });
-  });
-
-  group('DartEchoFactory', () {
-    test('creates plugin instances', () {
-      final plugin = DartEchoFactory.createInstance();
-      expect(plugin, isA<DartEchoPlugin>());
-    });
-
-    test('provides class info', () {
-      final info = DartEchoFactory.getClassInfo();
-      expect(info['name'], equals('Echo'));
-      expect(info['classId'], equals('DartEcho'));
     });
   });
 }

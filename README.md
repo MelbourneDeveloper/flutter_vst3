@@ -247,54 +247,46 @@ class MyProcessor {
 ```dart
 // lib/my_ui_main.dart
 import 'package:flutter/material.dart';
-import 'package:flutter_vst3/flutter_vst3.dart';
+import 'package:flutter_vst3/ui.dart';
 
 void main() {
-  runApp(MyPluginUI());
+  runApp(const MaterialApp(home: MyPluginUI()));
 }
 
 class MyPluginUI extends StatefulWidget {
+  const MyPluginUI({super.key});
+
   @override
-  _MyPluginUIState createState() => _MyPluginUIState();
+  State<MyPluginUI> createState() => _MyPluginUIState();
 }
 
 class _MyPluginUIState extends State<MyPluginUI> {
-  final parameters = MyParameters();
-  
+  static const gainParam = 0;
+  final VST3ParameterBinding _binding = VST3ParameterBinding.getInstance();
+
+  void _rebuild() => setState(() {});
+
   @override
   void initState() {
     super.initState();
-    // Register for DAW parameter changes
-    VST3Bridge.registerParameterChangeCallback(_onParameterChanged);
+    _binding.addListener(_rebuild);
+    _binding.loadInitialParameters();
   }
-  
-  void _onParameterChanged(int paramId, double value) {
-    setState(() {
-      parameters.setParameter(paramId, value);
-    });
+
+  @override
+  void dispose() {
+    _binding.removeListener(_rebuild);
+    super.dispose();
   }
-  
-  void _updateParameter(int paramId, double value) {
-    setState(() {
-      parameters.setParameter(paramId, value);
-    });
-    // Send to VST host/DAW
-    VST3Bridge.sendParameterToHost(paramId, value);
-  }
-  
+
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      home: Scaffold(
-        body: Column(
-          children: [
-            Text('My VST Plugin'),
-            Slider(
-              value: parameters.gain,
-              onChanged: (v) => _updateParameter(0, v),
-            ),
-          ],
-        ),
+    return Scaffold(
+      body: Slider(
+        value: _binding.getParameter(gainParam),
+        onChangeStart: (_) => _binding.beginEdit(gainParam),
+        onChanged: (value) => _binding.setParameter(gainParam, value),
+        onChangeEnd: (_) => _binding.endEdit(gainParam),
       ),
     );
   }
@@ -336,11 +328,11 @@ void main() async {
 flutter_vst3_toolkit/
 ├── flutter_vst3/           # Framework for building VST® 3 plugins with Flutter
 │   ├── lib/
-│   │   ├── flutter_vst3.dart
+│   │   ├── flutter_vst3.dart   # DSP worker API
+│   │   ├── ui.dart             # Flutter editor API
 │   │   └── src/
-│   │       ├── flutter_vst3_bridge.dart    # DAW ↔ Flutter binding
-│   │       ├── flutter_vst3_callbacks.dart # FFI callbacks
-│   │       └── flutter_vst3_parameters.dart # Parameter management
+│   │       ├── vst3_worker_loop.dart      # DSP worker over shared memory
+│   │       └── parameter_binding.dart     # Editor ↔ DAW parameters
 │   ├── native/             # C++ templates and CMake helpers
 │   └── scripts/            # Plugin generation scripts
 ├── vsts/
