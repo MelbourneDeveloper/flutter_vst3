@@ -1,18 +1,16 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:echo/src/echo_parameters.dart';
 import 'package:echo/src/echo_processor.dart';
+
+import 'echo_test_harness.dart';
 
 void main() {
   for (final rate in [44100, 96000, 192000]) {
     for (final delay in [0.0, 0.25, 1.0]) {
       test('impulse timing $rate $delay', () {
-        final dsp = EchoProcessor()..initialize(rate.toDouble(), 512);
-        final params = EchoParameters()
-          ..delayTime = delay
-          ..mix = 1
-          ..feedback = 0;
+        final (dsp, params) =
+            echoDsp(rate.toDouble(), 512, delayTime: delay, feedback: 0);
         final position = (rate * delay).round();
         final input = Float32List(position + 2)..[0] = 1;
         final output = Float32List(input.length);
@@ -24,12 +22,8 @@ void main() {
     }
   }
   test('bypass records incoming audio and advances tail', () {
-    final dsp = EchoProcessor()..initialize(1000, 512);
-    final params = EchoParameters()
-      ..delayTime = 0.01
-      ..feedback = 0
-      ..mix = 1
-      ..bypass = 1;
+    final (dsp, params) = echoDsp(1000, 512, delayTime: 0.01, feedback: 0);
+    params.bypass = 1;
     final first = Float32List(5)..[0] = 1;
     dsp.processStereo(first, Float32List(5), Float32List(5), Float32List(5), params);
     params.bypass = 0;
@@ -55,11 +49,8 @@ void main() {
   test('H23: maximum feedback stays bounded over 10 seconds of loud input', () {
     const rate = 48000.0;
     const block = 480;
-    final processor = EchoProcessor()..initialize(rate, block);
-    final parameters = EchoParameters()
-      ..delayTime = 0.01
-      ..feedback = 1.0
-      ..mix = 1.0;
+    final (processor, parameters) =
+        echoDsp(rate, block, delayTime: 0.01, feedback: 1.0);
     final input = Float32List(block)..fillRange(0, block, 1.0);
     final outL = Float32List(block);
     final outR = Float32List(block);
@@ -72,11 +63,8 @@ void main() {
   test('moving the delay is smoothed, with no jump in the output', () {
     const rate = 48000.0;
     const block = 64;
-    final processor = EchoProcessor()..initialize(rate, block);
-    final parameters = EchoParameters()
-      ..delayTime = 0.1
-      ..feedback = 0.0
-      ..mix = 1.0;
+    final (processor, parameters) =
+        echoDsp(rate, block, delayTime: 0.1, feedback: 0.0);
     final inputL = Float32List(block);
     final outL = Float32List(block);
     final outR = Float32List(block);
@@ -99,11 +87,8 @@ void main() {
   });
 
   test('zero delay passes input through with no stale samples', () {
-    final processor = EchoProcessor()..initialize(48000, 64);
-    final parameters = EchoParameters()
-      ..delayTime = 0.0
-      ..feedback = 0.0
-      ..mix = 1.0;
+    final (processor, parameters) =
+        echoDsp(48000, 64, delayTime: 0.0, feedback: 0.0);
     final input = Float32List(64)..fillRange(0, 64, 0.5);
     final outL = Float32List(64);
     final outR = Float32List(64);

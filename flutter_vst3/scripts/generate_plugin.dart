@@ -125,6 +125,11 @@ void generatePluginFiles(String pluginDir, String pluginName, String targetName,
   print('Generated ${parameters.length} parameter(s)');
 }
 
+/// Title-cases the parameter's name: underscores become spaces and every
+/// word starts uppercase.
+String _parameterTitle(Map<String, dynamic> p) =>
+    (p['name'] as String).replaceAll('_', ' ').split(' ').map((word) => word.isEmpty ? '' : word[0].toUpperCase() + word.substring(1)).join(' ');
+
 Map<String, String> _generateCppSnippets(List<Map<String, dynamic>> parameters, Map<String, dynamic> metadata, String pluginName) {
   if (parameters.isEmpty) {
     return {
@@ -143,13 +148,12 @@ Map<String, String> _generateCppSnippets(List<Map<String, dynamic>> parameters, 
   
   // Generate controller parameter registration
   final controllerInit = parameters.map((p) {
-    final title = (p['name'] as String).replaceAll('_', ' ').split(' ').map((word) => word.isEmpty ? '' : word[0].toUpperCase() + word.substring(1)).join(' ');
-    return '        parameters.addParameter(STR16("${_cpp(title)}"), STR16("${_cpp(p['units'])}"), 0, ${p['defaultValue']}, ParameterInfo::kCanAutomate, ${p['id']});';
+    return '        parameters.addParameter(STR16("${_cpp(_parameterTitle(p))}"), STR16("${_cpp(p['units'])}"), 0, ${p['defaultValue']}, ParameterInfo::kCanAutomate, ${p['id']});';
   }).join('\n');
-  
+
   // Generate parameter info getter
   final paramInfoCases = parameters.map((p) {
-    final title = (p['name'] as String).replaceAll('_', ' ').split(' ').map((word) => word.isEmpty ? '' : word[0].toUpperCase() + word.substring(1)).join(' ');
+    final title = _parameterTitle(p);
     return '''        case ${p['id']}:
             info.id = ${p['id']};
             info.title = STR16("${_cpp(title)}");

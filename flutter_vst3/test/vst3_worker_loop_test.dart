@@ -7,6 +7,8 @@ import 'package:flutter_vst3/src/vst3_worker_loop.dart';
 import 'package:flutter_vst3/src/vst3_shm_layout.dart';
 import 'package:flutter_vst3/src/vst3_shared_memory_processor.dart';
 
+import 'shm_test_harness.dart';
+
 class _Processor implements Vst3WorkerProcessor {
   final events = <(int, double)>[];
   final calls = <String>[];
@@ -47,23 +49,17 @@ void main() {
     final memory = calloc<Uint8>(vst3ShmTotalSize);
     addTearDown(() => calloc.free(memory));
     expect(() => validateShmHeader(memory.cast()), throwsStateError);
-    memory.cast<Uint32>().value = vst3ShmMagic;
-    expect(() => validateShmHeader(memory.cast()), throwsStateError);
-    Pointer<Uint32>.fromAddress(memory.address + vst3OffsetVersion).value =
-        vst3ShmVersion;
+    writeLiveMagicExpectingVersionReject(memory);
     expect(() => validateShmHeader(memory.cast()), returnsNormally);
   });
 
   test('commands and view reuse', () {
-    final memory = calloc<Uint8>(vst3ShmTotalSize);
-    addTearDown(() => calloc.free(memory));
+    final memory = shmBlock();
     final processor = _Processor();
     final views = Vst3BlockViews(memory.cast());
-    Pointer<Double>.fromAddress(memory.address + vst3OffsetSampleRate).value =
-        96000;
-    Pointer<Uint32>.fromAddress(memory.address + vst3OffsetMaxBlockSize).value =
-        256;
-    Pointer<Int32>.fromAddress(memory.address + vst3OffsetNumSamples).value = 8;
+    writeF64(memory, vst3OffsetSampleRate, 96000);
+    writeU32(memory, vst3OffsetMaxBlockSize, 256);
+    writeI32(memory, vst3OffsetNumSamples, 8);
     for (final command in [
       0,
       vst3CmdConfigure,
@@ -71,8 +67,7 @@ void main() {
       vst3CmdProcess,
       vst3CmdTerminate
     ]) {
-      Pointer<Uint32>.fromAddress(memory.address + vst3OffsetCommand).value =
-          command;
+      writeU32(memory, vst3OffsetCommand, command);
       expect(handleCommand(memory.cast(), views, processor),
           command != vst3CmdTerminate);
     }
@@ -105,20 +100,12 @@ void main() {
 }
 
 void _assertRouting(Pointer<Uint8> memory, List<Float32List> views) {
-  final offsets = [vst3OffsetInputL, vst3OffsetInputR,
-    vst3OffsetOutputL, vst3OffsetOutputR];
-  for (var channel = 0; channel < 4; channel++) {
-    final raw = Pointer<Float>.fromAddress(memory.address + offsets[channel]);
-    for (var sample = 0; sample < 8; sample++) {
-      raw[sample] = channel * 100 + sample + 0.25;
-    }
-  }
-  for (var channel = 0; channel < 4; channel++) {
+  fillChannels(memory, samples: 8, scale: 100, base: 0.25);
+  for (var channel = 0; channel < channelOffsets.length; channel++) {
     expect(views[channel],
         [for (var sample = 0; sample < 8; sample++) channel * 100 + sample + 0.25]);
     views[channel][7] = channel * 1000 + 0.5;
-    expect(Pointer<Float>.fromAddress(memory.address + offsets[channel])[7],
-        channel * 1000 + 0.5);
+    expect(readF32(memory, channelOffsets[channel], 7), channel * 1000 + 0.5);
   }
 }
 
@@ -126,16 +113,13 @@ void _wrapProbe(SendPort port) {
   final memory = calloc<Uint8>(vst3ShmTotalSize);
 
   final processor = _Processor();
-  Pointer<Uint32>.fromAddress(memory.address + vst3OffsetHostParamRead).value =
-      0xfffffffe;
-  Pointer<Uint32>.fromAddress(memory.address + vst3OffsetHostParamWrite).value =
-      1;
+  writeU32(memory, vst3OffsetHostParamRead, 0xfffffffe);
+  writeU32(memory, vst3OffsetHostParamWrite, 1);
   for (var i = 0; i < 3; i++) {
     final slot = ((0xfffffffe + i) & 0xffffffff) % vst3ShmParamQueueSize;
-    final address =
-        memory.address + vst3OffsetHostParams + slot * vst3ShmParamEventSize;
-    Pointer<Int32>.fromAddress(address).value = 10 + i;
-    Pointer<Double>.fromAddress(address + 8).value = i / 4;
+    final event = vst3OffsetHostParams + slot * vst3ShmParamEventSize;
+    writeI32(memory, event, 10 + i);
+    writeF64(memory, event + 8, i / 4);
   }
   drainHostParameters(memory.cast(), processor);
   final firstEvents = List.of(processor.events);

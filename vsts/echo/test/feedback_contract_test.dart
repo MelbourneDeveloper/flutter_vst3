@@ -1,14 +1,10 @@
 import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:echo/src/echo_parameters.dart';
-import 'package:echo/src/echo_processor.dart';
+
+import 'echo_test_harness.dart';
 
 (Float32List, Float32List) _render(double feedback) {
-  final dsp = EchoProcessor()..initialize(1000, 128);
-  final parameters = EchoParameters()
-    ..delayTime = 0.01
-    ..feedback = feedback
-    ..mix = 1;
+  final (dsp, parameters) = echoDsp(1000, 128, delayTime: 0.01, feedback: feedback);
   final input = Float32List(101)..[0] = 0.1;
   final left = Float32List(101), right = Float32List(101);
   dsp.processStereo(input, Float32List(101), left, right, parameters);

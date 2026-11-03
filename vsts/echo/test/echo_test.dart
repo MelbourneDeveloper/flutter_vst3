@@ -3,6 +3,16 @@ import 'package:test/test.dart';
 import 'package:echo/src/echo_processor.dart';
 import 'package:echo/src/echo_parameters.dart';
 
+import 'echo_test_harness.dart';
+
+/// Processes [input] on both channels into a fresh output buffer.
+Float32List _render(
+    EchoProcessor processor, EchoParameters parameters, Float32List input) {
+  final output = Float32List(input.length);
+  processor.processStereo(input, input, output, output, parameters);
+  return output;
+}
+
 void main() {
   group('EchoProcessor', () {
     test('initializes correctly', () {
@@ -13,12 +23,10 @@ void main() {
     });
 
     test('processes stereo audio without crashing', () {
-      final processor = EchoProcessor();
-      processor.initialize(44100.0, 512);
-      final parameters = EchoParameters();
-      parameters.mix = 0.8; // High mix for obvious effect
-      parameters.feedback = 0.7; // High feedback
-      parameters.delayTime = 0.3; // Medium delay
+      final (processor, parameters) = echoDsp(44100.0, 512,
+          delayTime: 0.3, // Medium delay
+          feedback: 0.7, // High feedback
+          mix: 0.8); // High mix for obvious effect
 
       final inputL = Float32List(128)..fillRange(0, 128, 0.5);
       final inputR = Float32List(128)..fillRange(0, 128, 0.3);
@@ -33,12 +41,10 @@ void main() {
     });
 
     test('preserves the exact dry block before the delay arrives', () {
-      final processor = EchoProcessor();
-      processor.initialize(44100.0, 512);
-      final parameters = EchoParameters();
-      parameters.mix = 0.9; // EXTREME mix for testing
-      parameters.feedback = 0.8; // High feedback
-      parameters.delayTime = 0.2; // Fast delay
+      final (processor, parameters) = echoDsp(44100.0, 512,
+          delayTime: 0.2, // Fast delay
+          feedback: 0.8, // High feedback
+          mix: 0.9); // EXTREME mix for testing
 
       // Process silence first to clear buffers
       final silence = Float32List(128);
@@ -75,23 +81,17 @@ void main() {
     });
 
     test('delay automation cannot emit audio before either delay arrives', () {
-      final processor = EchoProcessor();
-      processor.initialize(44100.0, 512);
-      final parameters = EchoParameters()
-        ..mix = 1.0
-        ..feedback = 0.5
-        ..delayTime = 0.1;
+      final (processor, parameters) = echoDsp(44100.0, 512,
+          delayTime: 0.1, feedback: 0.5);
 
       final input = Float32List.fromList(
         List.generate(512, (i) => (i % 32 == 0) ? 0.8 : 0.0),
       );
-      final output = Float32List(512);
-      processor.processStereo(input, input, output, output, parameters);
+      final output = _render(processor, parameters, input);
 
       // Change delayTime sharply
       parameters.delayTime = 0.6;
-      final output2 = Float32List(512);
-      processor.processStereo(input, input, output2, output2, parameters);
+      final output2 = _render(processor, parameters, input);
 
       expect(output, everyElement(0.0));
       expect(output2, everyElement(0.0));

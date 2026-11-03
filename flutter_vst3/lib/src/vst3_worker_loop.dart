@@ -44,11 +44,22 @@ abstract interface class Vst3Ipc {
   void dispose();
 }
 
+/// Reads the u32 field at [offset] of the shared block at [ptr].
+int shmU32(Pointer<Void> ptr, int offset) =>
+    Pointer<Uint32>.fromAddress(ptr.address + offset).value;
+
+/// Reads the i32 field at [offset] of the shared block at [ptr].
+int shmI32(Pointer<Void> ptr, int offset) =>
+    Pointer<Int32>.fromAddress(ptr.address + offset).value;
+
+/// Reads the f64 field at [offset] of the shared block at [ptr].
+double shmF64(Pointer<Void> ptr, int offset) =>
+    Pointer<Double>.fromAddress(ptr.address + offset).value;
+
 /// Throws unless [ptr] holds a live block with the expected protocol version.
 void validateShmHeader(Pointer<Void> ptr) {
-  final magic = Pointer<Uint32>.fromAddress(ptr.address + vst3OffsetMagic).value;
-  final version =
-      Pointer<Uint32>.fromAddress(ptr.address + vst3OffsetVersion).value;
+  final magic = shmU32(ptr, vst3OffsetMagic);
+  final version = shmU32(ptr, vst3OffsetVersion);
   magic == vst3ShmMagic
       ? null
       : throw StateError('Invalid VST3 shared memory magic: $magic');
@@ -90,11 +101,10 @@ void runWorker(
 }
 
 void _configure(Pointer<Void> ptr, Vst3WorkerProcessor processor) {
-  final sampleRate =
-      Pointer<Double>.fromAddress(ptr.address + vst3OffsetSampleRate).value;
-  final maxBlockSize =
-      Pointer<Uint32>.fromAddress(ptr.address + vst3OffsetMaxBlockSize).value;
-  processor.initialize(sampleRate, maxBlockSize);
+  processor.initialize(
+    shmF64(ptr, vst3OffsetSampleRate),
+    shmU32(ptr, vst3OffsetMaxBlockSize),
+  );
 }
 
 /// Handles commands until the host asks the worker to terminate. An exception
@@ -116,7 +126,7 @@ bool handleCommand(
   Vst3BlockViews views,
   Vst3WorkerProcessor processor,
 ) {
-  final cmd = Pointer<Uint32>.fromAddress(ptr.address + vst3OffsetCommand).value;
+  final cmd = shmU32(ptr, vst3OffsetCommand);
   switch (cmd) {
     case vst3CmdProcess:
       drainHostParameters(ptr, processor);
@@ -132,8 +142,7 @@ bool handleCommand(
 
 /// Returns the block length at [ptr], and throws if it's out of range.
 int blockLength(Pointer<Void> ptr) {
-  final numSamples =
-      Pointer<Int32>.fromAddress(ptr.address + vst3OffsetNumSamples).value;
+  final numSamples = shmI32(ptr, vst3OffsetNumSamples);
   return numSamples >= 0 && numSamples <= vst3ShmMaxSamples
       ? numSamples
       : throw StateError('Invalid block length: $numSamples');
@@ -186,8 +195,7 @@ final class Vst3BlockViews {
 /// The ring indices are 32-bit counters that wrap, so the read index is masked
 /// after every increment.
 void drainHostParameters(Pointer<Void> ptr, Vst3WorkerProcessor processor) {
-  final writeIdx =
-      Pointer<Uint32>.fromAddress(ptr.address + vst3OffsetHostParamWrite).value;
+  final writeIdx = shmU32(ptr, vst3OffsetHostParamWrite);
   final readPtr =
       Pointer<Uint32>.fromAddress(ptr.address + vst3OffsetHostParamRead);
   var readIdx = readPtr.value;
@@ -195,8 +203,8 @@ void drainHostParameters(Pointer<Void> ptr, Vst3WorkerProcessor processor) {
     final event = vst3OffsetHostParams +
         (readIdx % vst3ShmParamQueueSize) * vst3ShmParamEventSize;
     processor.setParameter(
-      Pointer<Int32>.fromAddress(ptr.address + event).value,
-      Pointer<Double>.fromAddress(ptr.address + event + 8).value,
+      shmI32(ptr, event),
+      shmF64(ptr, event + 8),
     );
     readIdx = (readIdx + 1) & 0xFFFFFFFF;
   }

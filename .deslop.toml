@@ -9,9 +9,9 @@
 # the audio thread — a performance cost we refuse to pay. Built-in generated/
 # build excludes still apply; project config only extends them.
 
-# Measured 6.42% with Deslop 0.38.0 (356/5545 LOC). This ceiling only goes down.
+# Measured 5.6% with Deslop 0.38.0 (301/5413 LOC). This ceiling only goes down.
 [threshold]
-max_duplication_percent = 6.5
+max_duplication_percent = 6.0
 
 [defaults]
 report_hide = [

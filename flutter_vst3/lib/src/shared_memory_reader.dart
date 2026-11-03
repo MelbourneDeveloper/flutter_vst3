@@ -60,32 +60,22 @@ final class Vst3AudioBufferReader {
   }
 
   /// Returns a zero-copy typed list view over the left output channel buffer.
-  Float32List getOutputL([int? count]) {
-    if (!isValid) return Float32List(0);
-    final n = (count ?? numSamples).clamp(0, vst3ShmMaxSamples);
-    return _outputL.asTypedList(n);
-  }
+  Float32List getOutputL([int? count]) => _channelView(_outputL, count);
 
   /// Returns a zero-copy typed list view over the right output channel buffer.
-  Float32List getOutputR([int? count]) {
-    if (!isValid) return Float32List(0);
-    final n = (count ?? numSamples).clamp(0, vst3ShmMaxSamples);
-    return _outputR.asTypedList(n);
-  }
+  Float32List getOutputR([int? count]) => _channelView(_outputR, count);
 
   /// Returns a zero-copy typed list view over the left input channel buffer.
-  Float32List getInputL([int? count]) {
-    if (!isValid) return Float32List(0);
-    final n = (count ?? numSamples).clamp(0, vst3ShmMaxSamples);
-    return _inputL.asTypedList(n);
-  }
+  Float32List getInputL([int? count]) => _channelView(_inputL, count);
 
   /// Returns a zero-copy typed list view over the right input channel buffer.
-  Float32List getInputR([int? count]) {
-    if (!isValid) return Float32List(0);
-    final n = (count ?? numSamples).clamp(0, vst3ShmMaxSamples);
-    return _inputR.asTypedList(n);
-  }
+  Float32List getInputR([int? count]) => _channelView(_inputR, count);
+
+  /// Channel view for [channel], clamped by [count] and the block maximum,
+  /// empty while the block is invalid ([TELEMETRY-BOUNDS]).
+  Float32List _channelView(Pointer<Float> channel, int? count) => isValid
+      ? channel.asTypedList((count ?? numSamples).clamp(0, vst3ShmMaxSamples))
+      : Float32List(0);
 
   /// Returns a mixed stereo waveform snapshot up to [maxCount] samples.
   Float32List getLatestOutputSamples({int maxCount = 256}) {
