@@ -31,6 +31,7 @@ Three phases, each once — ❌ mixing them:
 2. **Test** — run in parallel with coverage on the cached build, via a script's `test` step. ❌ recompiling, except jobs that test the build itself.
 3. **Coverage** — check the reports against [`coverage-thresholds.json`](coverage-thresholds.json). ❌ running tests. Floors only go ⬆️.
 
+- A pull request that builds nothing (docs, config, version numbers: [`.github/ci_changes.py`](.github/ci_changes.py)) runs only analyze and the repository rules. A push to `main` always runs everything.
 - `make ci` runs the same order. `.github/workflows/ci.yml` has one root `CI` job (`if: always()`, `needs:` every job); a new job goes in its `needs:`.
 - ❌ weaken gates or merge red — fix the code.
 

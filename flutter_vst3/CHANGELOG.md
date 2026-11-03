@@ -1,6 +1,13 @@
-## Unreleased
+## 0.2.0
+
+**Breaking:** DSP now runs in a separate compiled worker process, so plugins must move to the new entry point.
 
 - Removed obsolete same-process VST3Bridge registration and FFI callbacks; use the shared-memory worker.
+- Removed `VST3Processor`, `VST3Bridge`, `VST3ParameterHandler` and `VST3ParameterInfo`. Implement `Vst3WorkerProcessor` and pass it to `runVst3SharedMemoryProcessor` instead. See `create_plugin_guide.md`.
+- Each plugin instance now runs its DSP in its own `dart compile exe` worker, connected to the host over shared memory. A worker that dies or runs late gives silence instead of taking down the DAW, and restarts at the next activation.
+- Added the embedded Flutter editor for macOS, Windows and Linux. Linux needs X11: `GDK_BACKEND=x11`.
+- Added `package:flutter_vst3/ui.dart` with `VST3ParameterBinding`, `RotaryKnob` and `Vst3AudioBufferReader`.
+- `flutterEntrypoint` in `plugin_metadata.json` names the Dart function the editor starts on macOS and Windows. Linux always runs `main`, so a plugin's `main` must call that function.
 
 ## 0.1.2
 

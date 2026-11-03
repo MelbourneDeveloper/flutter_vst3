@@ -29,3 +29,6 @@ vst_plugins/
 vsts/*/*_processor
 vsts/*/*_processor.exe
 vsts/*/macos/Flutter/ephemeral/
+
+
+.commandtree/

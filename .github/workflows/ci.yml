@@ -4,6 +4,8 @@ name: CI
 #   1. Build: analyze, build every binary the tests run, cache the build.
 #   2. Test: run tests in parallel with coverage, on the cached build.
 #   3. Coverage: check the collected reports against coverage-thresholds.json.
+# A pull request that builds nothing (.github/ci_changes.py) runs only analyze
+# and the repository rules. A push to main always runs everything.
 
 on:
   pull_request:
@@ -32,6 +34,23 @@ env:
 jobs:
   # Phase 1: build and analyze
 
+  changes:
+    name: 'Build: classify changes'
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.classify.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - id: classify
+        run: |
+          code=true
+          if [ "${{ github.event_name }}" = pull_request ]; then
+            code="$(python3 .github/ci_changes.py HEAD^1 HEAD)"
+          fi
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
   analyze:
     name: 'Build: analyze and duplication'
     runs-on: ubuntu-latest
@@ -49,6 +68,8 @@ jobs:
 
   build:
     name: 'Build: binaries (${{ matrix.os }})'
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -272,7 +293,8 @@ jobs:
 
   repository-rules:
     name: 'Test: repository and documentation rules'
-    needs: [analyze, build]
+    needs: [changes, analyze, build]
+    if: ${{ !cancelled() && needs.analyze.result == 'success' && contains(fromJSON('["success", "skipped"]'), needs.build.result) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -282,13 +304,16 @@ jobs:
           cache: true
       - uses: ./.github/actions/vst3-toolchain
       - uses: ./.github/actions/restore-build
+        if: needs.changes.outputs.code == 'true'
       - run: make dart-deps
+      - run: python3 .github/ci_changes_test.py
       - run: python3 flutter_vst3/test/native/repo_rules_test.py
       - run: python3 flutter_vst3/test/native/build_rules_versions_test.py
       - run: python3 flutter_vst3/test/native/coverage_check_test.py
       - run: python3 flutter_vst3/test/native/build_rules_make_test.py
       - run: python3 flutter_vst3/test/native/build_rules_flutter_test.py
       - run: python3 flutter_vst3/test/native/docs_commands_test.py
+        if: needs.changes.outputs.code == 'true'
 
   # Phase 3: check coverage. Runs no tests.
 
@@ -325,6 +350,7 @@ jobs:
     if: always()
     needs:
       - analyze
+      - changes
       - build
       - package-tests
       - ipc
@@ -339,8 +365,11 @@ jobs:
       - coverage
     runs-on: ubuntu-latest
     steps:
-      - name: Fail if any required job failed, was cancelled or was skipped
-        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped')
+      - name: Fail if any required job failed or was cancelled
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
+      - name: Fail if a job was skipped on a change that needs a build
+        if: contains(needs.*.result, 'skipped') && needs.changes.outputs.code != 'false'
         run: exit 1
       - name: All required jobs succeeded
         run: echo "All required jobs succeeded."
