@@ -4,7 +4,7 @@
 .DEFAULT_GOAL := reverb
 include mk/common.mk
 PACKAGES ?= dart_vst_host dart_vst_graph flutter_vst3 vsts/flutter_reverb vsts/echo
-.PHONY: help deploy deploy-echo deploy-reverb echo reverb build native dart-deps lint fmt deslop test coverage-check ci setup clean _plugin _test-native _test-host _test-graph _check-env
+.PHONY: help deploy deploy-echo deploy-reverb echo reverb build native dart-deps lint fmt deslop test coverage-check publish-check ci setup clean _plugin _test-native _test-host _test-graph _check-env
 
 ## deploy: Build Echo and Reverb, then copy both to the folder VST3 hosts scan.
 ## deploy-echo: Build Echo, then copy it to that folder.
@@ -48,6 +48,10 @@ _test-host: native
 	$(MAKE) -C dart_vst_host _deps _test
 _test-graph: native
 	$(MAKE) -C dart_vst_graph _deps _test
+
+## publish-check: Validate the flutter_vst3 package for pub.dev without publishing.
+publish-check:
+	cd flutter_vst3 && flutter pub publish --dry-run
 
 ## coverage-check: Check coverage reports against coverage-thresholds.json. Runs no tests.
 coverage-check:
