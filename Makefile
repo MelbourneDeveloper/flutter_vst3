@@ -5,7 +5,7 @@
 VST3_SDK_DIR ?= $(CURDIR)/vst3sdk
 export VST3_SDK_DIR
 FLUTTER_BUILD_MODE ?= release
-.PHONY: all deslop lint fmt ci setup build native plugin test test-native test-host test-graph dart-deps reverb-deps echo-deps flutter-deps reverb reverb-vst reverb-build-only echo echo-vst echo-build-only echo-flutter install clean clean-native clean-plugin check-env help
+.PHONY: all deslop lint fmt ci setup build native plugin test test-native test-host test-graph coverage-check dart-deps reverb-deps echo-deps flutter-deps reverb reverb-vst reverb-build-only echo echo-vst echo-build-only echo-flutter install clean clean-native clean-plugin check-env help
 
 all: reverb
 build: native dart-deps plugin
@@ -55,21 +55,23 @@ fmt:
 	dart format dart_vst_host/lib dart_vst_host/test dart_vst_graph/lib dart_vst_graph/test flutter_vst3/lib flutter_vst3/test vsts/echo/lib vsts/echo/test vsts/flutter_reverb/lib vsts/flutter_reverb/test
 deslop:
 	deslop . --nohtml --nojson --no-color --log-level error
-ci: deslop lint test build
+ci: deslop lint build test coverage-check
 setup:
 	./setup.sh
 test: native dart-deps test-native
-	cd dart_vst_host && dart test
-	cd dart_vst_graph && dart test
-	cd flutter_vst3 && flutter test
-	cd vsts/flutter_reverb && flutter test
-	cd vsts/echo && flutter test
+	bash flutter_vst3/test/native/run_package_coverage.sh dart_vst_host
+	bash flutter_vst3/test/native/run_package_coverage.sh dart_vst_graph
+	bash flutter_vst3/test/native/run_package_coverage.sh flutter_vst3
+	bash flutter_vst3/test/native/run_package_coverage.sh vsts/flutter_reverb
+	bash flutter_vst3/test/native/run_package_coverage.sh vsts/echo
 test-native:
 	bash flutter_vst3/test/native/run.sh
 test-host: native
 	cd dart_vst_host && dart pub get && dart test
 test-graph: native
 	cd dart_vst_graph && dart pub get && dart test
+coverage-check:
+	python3 flutter_vst3/test/native/coverage_check.py
 
 install: plugin
 	case "$$(uname)" in Darwin) dest="$$HOME/Library/Audio/Plug-Ins/VST3";; Linux) dest="$$HOME/.vst3";; MINGW*|MSYS*|CYGWIN*) dest="$$LOCALAPPDATA/Programs/Common/VST3";; *) echo 'Unsupported platform' >&2; exit 1;; esac; \
@@ -87,5 +89,5 @@ check-env:
 	command -v dart
 	command -v flutter
 help:
-	@echo 'Targets: deslop, lint, fmt, ci, setup, native, dart-deps, reverb, echo, plugin, test, test-native, test-host, test-graph, install, clean'
+	@echo 'Targets: deslop, lint, fmt, ci, setup, native, dart-deps, reverb, echo, plugin, test, test-native, test-host, test-graph, coverage-check, install, clean'
 	@echo 'Set VST3_SDK_DIR to the Steinberg SDK root. Flutter is required for plugin packages.'

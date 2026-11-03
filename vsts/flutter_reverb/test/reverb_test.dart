@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'dart:math' as math;
 import 'dart:typed_data';
-import '../lib/flutter_reverb_parameters.dart';
-import '../lib/src/reverb_processor.dart';
+import 'package:flutter_reverb/flutter_reverb_parameters.dart';
+import 'package:flutter_reverb/src/reverb_processor.dart';
 
 /// Test suite for Flutter Reverb VST3 plugin components
 void main() {

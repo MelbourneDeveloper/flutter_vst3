@@ -1,0 +1,10 @@
+{
+  "_doc": "Line coverage floors per package, measured from each package's tests; only ever go up.",
+  "packages": {
+    "dart_vst_host": 60.3,
+    "dart_vst_graph": 37.7,
+    "flutter_vst3": 51.0,
+    "vsts/flutter_reverb": 85.9,
+    "vsts/echo": 63.2
+  }
+}

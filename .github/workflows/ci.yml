@@ -1,5 +1,10 @@
 name: CI
 
+# Three phases, each once:
+#   1. Build: analyze, build every binary the tests run, cache the build.
+#   2. Test: run tests in parallel with coverage, on the cached build.
+#   3. Coverage: check the collected reports against coverage-thresholds.json.
+
 on:
   pull_request:
   push:
@@ -14,10 +19,20 @@ concurrency:
 
 env:
   VST3_SDK_TAG: v3.8.1_build_84
+  VST3_E2E_BUILD_DIR: build/e2e
+  VST3_IPC_TEST_BUILD_DIR: ${{ github.workspace }}/build/e2e/ipc
+  VST3_TEST_PLUGIN: ${{ github.workspace }}/build/e2e/adelay/VST3/Release/adelay.vst3
+  BUILD_CACHE_PATHS: |
+    build/e2e
+    libdart_vst_*
+    dart_vst_host/libdart_vst_host.*
+    dart_vst_graph/libdart_vst_graph.*
 
 jobs:
-  duplication:
-    name: Deslop duplication gate
+  # Phase 1: build and analyze
+
+  analyze:
+    name: 'Build: analyze and duplication'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,51 +40,14 @@ jobs:
         with:
           nohtml: true
           upload-artifact: false
-
-  flutter-vst3:
-    name: flutter_vst3 analyze and test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
-      - name: Resolve dependencies
-        working-directory: flutter_vst3
-        run: flutter pub get
-      - name: Analyze
-        working-directory: flutter_vst3
-        run: flutter analyze --no-fatal-infos
-      - name: Test
-        working-directory: flutter_vst3
-        run: flutter test
+      - run: make lint
 
-  plugin-tests:
-    name: ${{ matrix.plugin }} analyze and test
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        plugin: [echo, flutter_reverb]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
-      - name: Resolve dependencies
-        working-directory: vsts/${{ matrix.plugin }}
-        run: flutter pub get
-      - name: Analyze
-        working-directory: vsts/${{ matrix.plugin }}
-        run: flutter analyze --no-fatal-infos
-      - name: Test
-        working-directory: vsts/${{ matrix.plugin }}
-        run: flutter test
-
-  ipc:
-    name: IPC round trip (${{ matrix.os }})
+  build:
+    name: 'Build: binaries (${{ matrix.os }})'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -81,38 +59,120 @@ jobs:
         with:
           channel: stable
           cache: true
-      - name: Resolve dependencies
-        working-directory: flutter_vst3
-        run: flutter pub get
+      - uses: ./.github/actions/vst3-toolchain
       - name: Set up MSVC
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
+      - name: Resolve dependencies
+        shell: bash
+        run: for package in flutter_vst3 vsts/echo vsts/flutter_reverb; do (cd "$package" && flutter pub get); done
+      - name: IPC tests on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./flutter_vst3/test/native/run.ps1 -Phase build
+      - name: IPC tests on Linux and macOS
+        if: runner.os != 'Windows'
+        run: bash flutter_vst3/test/native/run.sh build
+      - name: Echo, Reverb, the test hosts and the validator
+        shell: bash
+        run: |
+          bash flutter_vst3/test/native/run_plugin_e2e.sh build
+          bash flutter_vst3/test/native/run_editor_e2e.sh build
+      - name: Editor logic test
+        if: runner.os == 'Linux'
+        run: bash flutter_vst3/test/native/run_view_logic.sh build
+      - name: Host and graph libraries, and their ADelay fixture
+        if: runner.os != 'Windows'
+        run: |
+          make native
+          cmake -S "$VST3_SDK_DIR" -B build/e2e/adelay -DCMAKE_BUILD_TYPE=Release \
+            -DSMTG_ENABLE_VSTGUI_SUPPORT=OFF -DSMTG_CREATE_PLUGIN_LINK=OFF -DSMTG_ENABLE_VST3_HOSTING_EXAMPLES=OFF
+          cmake --build build/e2e/adelay --target adelay --parallel
+      - name: Drop object files from the cache
+        shell: bash
+        run: find build/e2e \( -name '*.o' -o -name '*.obj' \) -delete
+      - uses: actions/cache/save@v4
+        with:
+          path: ${{ env.BUILD_CACHE_PATHS }}
+          key: build-${{ runner.os }}-${{ github.sha }}-${{ github.run_id }}
+
+  # Phase 2: test on the cached build
+
+  package-tests:
+    name: 'Test: ${{ matrix.package }} (${{ matrix.os }})'
+    needs: [analyze, build]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { package: flutter_vst3, artifact: flutter_vst3, os: ubuntu-latest }
+          - { package: vsts/echo, artifact: echo, os: ubuntu-latest }
+          - { package: vsts/flutter_reverb, artifact: flutter_reverb, os: ubuntu-latest }
+          - { package: dart_vst_host, artifact: dart_vst_host, os: ubuntu-latest }
+          - { package: dart_vst_host, artifact: dart_vst_host, os: macos-latest }
+          - { package: dart_vst_graph, artifact: dart_vst_graph, os: ubuntu-latest }
+          - { package: dart_vst_graph, artifact: dart_vst_graph, os: macos-latest }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - uses: ./.github/actions/restore-build
+      - name: Resolve dependencies
+        working-directory: ${{ matrix.package }}
+        run: flutter pub get
+      - name: Run with coverage
+        run: bash flutter_vst3/test/native/run_package_coverage.sh ${{ matrix.package }}
+      - name: Upload coverage
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.artifact }}
+          path: ${{ matrix.package }}/coverage/lcov.info
+          retention-days: 1
+          if-no-files-found: error
+
+  ipc:
+    name: 'Test: IPC round trip (${{ matrix.os }})'
+    needs: [analyze, build]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/restore-build
       - name: Run on Windows
         if: runner.os == 'Windows'
         shell: pwsh
-        run: ./build.bat test-native
+        run: ./flutter_vst3/test/native/run.ps1 -Phase test
       - name: Run on Linux and macOS
         if: runner.os != 'Windows'
-        run: bash flutter_vst3/test/native/run.sh
+        run: bash flutter_vst3/test/native/run.sh test
 
   view-logic:
-    name: editor logic
+    name: 'Test: editor logic'
+    needs: [analyze, build]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Run
-        run: bash flutter_vst3/test/native/run_view_logic.sh
+      - uses: ./.github/actions/restore-build
+      - run: bash flutter_vst3/test/native/run_view_logic.sh test
 
   makefile:
-    name: make test failure propagation
+    name: 'Test: make test failure propagation'
+    needs: [analyze, build]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Run
-        run: bash dart_vst_host/test/native/harness_test.sh
+      - run: bash dart_vst_host/test/native/harness_test.sh
 
   plugin-e2e:
-    name: Echo and validator (${{ matrix.os }})
+    name: 'Test: Echo and validator (${{ matrix.os }})'
+    needs: [analyze, build]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -120,23 +180,16 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
       - uses: ./.github/actions/vst3-toolchain
-      - name: Set up MSVC
-        if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1
-      - name: Resolve dependencies
-        working-directory: vsts/echo
-        run: flutter pub get
-      - name: Run
-        shell: bash
-        run: bash flutter_vst3/test/native/run_plugin_e2e.sh
+        with:
+          runtime-only: 'true'
+      - uses: ./.github/actions/restore-build
+      - shell: bash
+        run: bash flutter_vst3/test/native/run_plugin_e2e.sh test
 
   editor-e2e:
-    name: Flutter editor in a test host (${{ matrix.os }})
+    name: 'Test: Flutter editor in a test host (${{ matrix.os }})'
+    needs: [analyze, build]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -144,37 +197,18 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
       - uses: ./.github/actions/vst3-toolchain
-      - name: Set up MSVC
-        if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1
-      - name: Run
-        shell: bash
-        run: bash flutter_vst3/test/native/run_editor_e2e.sh
+        with:
+          runtime-only: 'true'
+      - uses: ./.github/actions/restore-build
+      - shell: bash
+        run: bash flutter_vst3/test/native/run_editor_e2e.sh test
 
-  native:
-    name: host and graph libraries (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
-      - uses: ./.github/actions/vst3-toolchain
-      - name: Test
-        run: make test-host test-graph
+  # The next three test the build itself, so they build in their own trees.
 
   incremental-build:
-    name: incremental worker rebuild
+    name: 'Test: incremental worker rebuild'
+    needs: [analyze, build]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -187,7 +221,8 @@ jobs:
       - run: python3 flutter_vst3/test/native/generator_strings_test.py
 
   windows-public-build:
-    name: Windows public build and install
+    name: 'Test: Windows public build and install'
+    needs: [analyze, build]
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -212,7 +247,8 @@ jobs:
           }
 
   editor-mutations:
-    name: Editor mutation proof (${{ matrix.os }})
+    name: 'Test: editor mutation proof (${{ matrix.os }})'
+    needs: [analyze, build]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 120
     strategy:
@@ -234,7 +270,8 @@ jobs:
         run: bash flutter_vst3/test/native/run_editor_mutations.sh
 
   repository-rules:
-    name: removed design and documentation regressions
+    name: 'Test: repository and documentation rules'
+    needs: [analyze, build]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -243,35 +280,66 @@ jobs:
           channel: stable
           cache: true
       - uses: ./.github/actions/vst3-toolchain
+      - uses: ./.github/actions/restore-build
+      - run: make dart-deps
       - run: python3 flutter_vst3/test/native/repo_rules_test.py
       - run: python3 flutter_vst3/test/native/build_rules_versions_test.py
-      - run: make native dart-deps
-      - run: make lint
+      - run: python3 flutter_vst3/test/native/coverage_check_test.py
       - run: python3 flutter_vst3/test/native/build_rules_make_test.py
       - run: python3 flutter_vst3/test/native/build_rules_flutter_test.py
       - run: python3 flutter_vst3/test/native/docs_commands_test.py
+
+  # Phase 3: check coverage. Runs no tests.
+
+  coverage:
+    name: 'Coverage: check thresholds'
+    needs: package-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: coverage-flutter_vst3
+          path: flutter_vst3/coverage
+      - uses: actions/download-artifact@v4
+        with:
+          name: coverage-echo
+          path: vsts/echo/coverage
+      - uses: actions/download-artifact@v4
+        with:
+          name: coverage-flutter_reverb
+          path: vsts/flutter_reverb/coverage
+      - uses: actions/download-artifact@v4
+        with:
+          name: coverage-dart_vst_host
+          path: dart_vst_host/coverage
+      - uses: actions/download-artifact@v4
+        with:
+          name: coverage-dart_vst_graph
+          path: dart_vst_graph/coverage
+      - run: make coverage-check
 
   ci:
     name: CI
     if: always()
     needs:
-      - duplication
-      - flutter-vst3
-      - plugin-tests
+      - analyze
+      - build
+      - package-tests
       - ipc
       - view-logic
       - makefile
       - plugin-e2e
       - editor-e2e
-      - native
       - incremental-build
       - windows-public-build
-      - repository-rules
       - editor-mutations
+      - repository-rules
+      - coverage
     runs-on: ubuntu-latest
     steps:
-      - name: Fail if any required job failed or was cancelled
-        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+      - name: Fail if any required job failed, was cancelled or was skipped
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped')
         run: exit 1
       - name: All required jobs succeeded
         run: echo "All required jobs succeeded."

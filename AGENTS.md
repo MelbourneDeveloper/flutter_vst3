@@ -26,7 +26,12 @@ Steinberg VST® 3 toolkit for Dart and Flutter: build plugins and hosts with no 
 - Validate built plugins: `./validate_echo.sh`, `./validate_flutter_reverb.sh`.
 
 ## CI
-- `make ci` = deslop, lint, test, build. `.github/workflows/ci.yml` has one root `CI` job (`if: always()`, `needs:` every job); a new job goes in its `needs:`.
+Three phases, each once — ❌ mixing them:
+1. **Build** — lint, duplication, build every binary the tests run, cache the build.
+2. **Test** — run in parallel with coverage on the cached build, via a script's `test` step. ❌ recompiling, except jobs that test the build itself.
+3. **Coverage** — check the reports against [`coverage-thresholds.json`](coverage-thresholds.json). ❌ running tests. Floors only go ⬆️.
+
+- `make ci` runs the same order. `.github/workflows/ci.yml` has one root `CI` job (`if: always()`, `needs:` every job); a new job goes in its `needs:`.
 - ❌ weaken gates or merge red — fix the code.
 
 ## Code

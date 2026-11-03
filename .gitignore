@@ -1,5 +1,6 @@
 # Ignore build products
 build/
+coverage/
 .dart_tool/
 .idea/
 *.iml
